@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <float.h>
-#include "zcoap.h"
+#include "zcoap-server.h"
 
 #define COAP_VERSION 1
 #define COAP_MAX_TKL 8

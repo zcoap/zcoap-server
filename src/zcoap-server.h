@@ -1,12 +1,12 @@
 /*
- * File:   zcoap.h
+ * File:   zcoap-server.h
  * Author: Michael Sandstedt
  *
  * Created on March 31, 2018, 1:24 PM
  */
 
-#ifndef ZCOAP_H
-#define ZCOAP_H
+#ifndef ZCOAP_SERVER_H
+#define ZCOAP_SERVER_H
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -442,4 +442,4 @@ extern void coap_init(coap_node_t *root); // <- init must be called against any 
 extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, coap_node_t *root); // <- server entry point!
 
 extern const coap_node_t wellknown_uri;
-endif	/* ZCOAP_H */
+#endif	/* ZCOAP_SERVER_H */
