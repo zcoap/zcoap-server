@@ -2392,6 +2392,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_llong(coap_req_data_t
     }
     if (content_fmt) {
         switch (*content_fmt) {
+            #ifdef ZEPTO_COAP_EXTENSIONS
             case ZEPTO_FMT_U16: {
                 uint16_t pval;
                 if (len != sizeof(pval)) {
@@ -2500,6 +2501,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_llong(coap_req_data_t
                 }
                 return 0;
             }
+            #endif /* ZEPTO_COAP_EXTENSIONS */
             case COAP_FMT_TEXT:
                 break; // handled below
             default:
@@ -2565,6 +2567,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_ulong(coap_req_data_t
     }
     if (content_fmt) {
         switch (*content_fmt) {
+            #ifdef ZEPTO_COAP_EXTENSIONS
             case ZEPTO_FMT_U16: {
                 uint16_t pval;
                 if (len != sizeof(pval)) {
@@ -2685,6 +2688,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_ulong(coap_req_data_t
                 }
                 return 0;
             }
+            #endif /* ZEPTO_COAP_EXTENSIONS */
             case COAP_FMT_TEXT:
                 break; // handled below
             default:
@@ -2750,6 +2754,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_long(coap_req_data_t 
     }
     if (content_fmt) {
         switch (*content_fmt) {
+            #ifdef ZEPTO_COAP_EXTENSIONS
             case ZEPTO_FMT_U16: {
                 uint16_t pval;
                 if (len != sizeof(pval)) {
@@ -2866,6 +2871,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_long(coap_req_data_t 
                 }
                 return 0;
             }
+            #endif /* ZEPTO_COAP_EXTENSIONS */
             case COAP_FMT_TEXT:
                 break; // handled below
             default:
@@ -2931,6 +2937,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_float(coap_req_data_t
     }
     if (content_fmt) {
         switch (*content_fmt) {
+            #ifdef ZEPTO_COAP_EXTENSIONS
             case ZEPTO_FMT_U16: {
                 uint16_t pval;
                 if (len != sizeof(pval)) {
@@ -3022,6 +3029,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_float(coap_req_data_t
                 *out = pval;
                 return 0;
             }
+            #endif /* ZEPTO_COAP_EXTENSIONS */
             case COAP_FMT_TEXT:
                 break; // handled below
             default:
@@ -3208,7 +3216,7 @@ void coap_printf(coap_req_data_t *req, const char *fmt, ...)
  *
  * @return true if host environment is little endian, else false
  */
-bool host_is_little_endian(void)
+static bool host_is_little_endian(void)
 {
     if (hton(42) != 42) {
         return true;
@@ -3223,7 +3231,7 @@ bool host_is_little_endian(void)
  * @param hostllong 64-bit integer in host byte order
  * @param 64-bit integer in network byte order
  */
-uint64_t __attribute__((const)) ZCOAP_HTONLL(uint64_t hostllong)
+static uint64_t __attribute__((const)) ZCOAP_HTONLL(uint64_t hostllong)
 {
     if (!host_is_little_endian) {
         return hostllong; // no conversion necessary
@@ -3248,7 +3256,7 @@ uint64_t __attribute__((const)) ZCOAP_HTONLL(uint64_t hostllong)
  * @param hostfloat single-precision IEEE-754 float in host byte order
  * @param single-precision IEEE-754 float in network byte order
  */
-float __attribute__((const)) ZCOAP_HTONF(float hostfloat)
+static float __attribute__((const)) ZCOAP_HTONF(float hostfloat)
 {
     if (!host_is_little_endian) {
         return hostfloat; // no conversion necessary
@@ -3269,7 +3277,7 @@ float __attribute__((const)) ZCOAP_HTONF(float hostfloat)
  * @param hostdouble double-precision IEEE-754 float in host byte order
  * @param double-precision IEEE-754 float in network byte order
  */
-ZCOAP_DOUBLE __attribute__((const)) ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
+static ZCOAP_DOUBLE __attribute__((const)) ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
 {
     if (!host_is_little_endian) {
         return hostdouble; // no conversion necessary
@@ -3725,7 +3733,7 @@ void coap_return_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[]
         case ZCOAP_FMT_TEXT: // default handling behavior is text return
             coap_printf(req, fmt ? fmt : ZCOAP_PRINTF_FMT_FLOAT, (double)val); // %f means double - period, and whatever that is; do *not* use ZCOAP_DOUBLE macro here
             break;
-        #ifdef ZEPTO_COAP_EXCEPTIONS
+        #ifdef ZEPTO_COAP_EXTENSIONS
         case ZEPTO_FMT_AUTO:
         case ZEPTO_FMT_FLOAT:
             val = ZCOAP_HTONF(val);
@@ -3737,7 +3745,7 @@ void coap_return_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[]
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), *cf, sizeof(_val), &_val);
             break;
         }
-        #endif /* ZEPTO_COAP_EXCEPTIONS */
+        #endif /* ZEPTO_COAP_EXTENSIONS */
         default:
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
             break;
@@ -3779,7 +3787,7 @@ void coap_return_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[
             val = ZCOAP_HTOND(val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_DOUBLE, sizeof(val), &val);
             break;
-        /* ZEPTO_COPA_EXTENSIONS */
+        #endif /* ZEPTO_COAP_EXTENSIONS */
         default:
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
             break;
@@ -3891,10 +3899,9 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZEPTO_COAP_EXTENSIONS
-    ZEPTO_FMT_U32,
+    ZEPTO_FMT_U64,
     #endif
     ZCOAP_FMT_SENTINEL);
-    unsigned long long val;
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
@@ -3954,7 +3961,7 @@ void coap_get_i32(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZEPTO_COAP_EXTENSIONS
-    ZEPTO_FMT_U32,
+    ZEPTO_FMT_I32,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3984,7 +3991,7 @@ void coap_get_i64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZEPTO_COAP_EXTENSIONS
-    ZEPTO_FMT_U32,
+    ZEPTO_FMT_I64,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -4426,13 +4433,13 @@ void set_ct_mask(ct_mask_t *mask, ...)
             case COAP_FMT_EXI:
                 mask->ct_exi = 1;
                 break;
-            case ZEPTO_FMT_BOOL:
-                mask->ct_bool = 1;
-                break;
             case ZEPTO_FMT_JSON:
                 mask->ct_json = 1;
                 break;
             #ifdef ZEPTO_COAP_EXTENSIONS
+            case ZEPTO_FMT_BOOL:
+                mask->ct_bool = 1;
+                break;
             case ZEPTO_FMT_U16:
                 mask->ct_u16 = 1;
                 break;
