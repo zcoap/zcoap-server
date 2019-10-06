@@ -3167,10 +3167,10 @@ coap_code_t coap_parse_req_bool(coap_req_data_t *req, coap_ct_t ct, size_t len, 
     // Use ASCII parser below.
 
     // First, parse for our truthiness strings.
-    if (len >= strlen(ZCOAP_TRUE_STR) && !strncmp(payload, ZCOAP_TRUE_STR, len)) {
+    if (len >= strlen(ZCOAP_TRUE_STR) && !strncasecmp(payload, ZCOAP_TRUE_STR, len)) {
         *out = ZCOAP_TRUE;
         return 0;
-    } else if (len >= strlen(ZCOAP_FALSE_STR) && !strncmp(payload, ZCOAP_FALSE_STR, len)) {
+    } else if (len >= strlen(ZCOAP_FALSE_STR) && !strncasecmp(payload, ZCOAP_FALSE_STR, len)) {
         *out = ZCOAP_FALSE;
         return 0;
     }
