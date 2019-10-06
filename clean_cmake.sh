@@ -3,7 +3,7 @@
 set -e
 
 rm -f -R ./CMakeFiles
-rm -f -R ./Bin/CMakeFiles
+rm -f -R ./build
 rm -f CMakeCache.txt
 rm -f cmake_install.cmake
 rm -f Makefile
