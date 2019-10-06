@@ -10,8 +10,7 @@ message(STATUS "\r\n********************************************\r\n-- zcoap-ser
 message(STATUS "\r\nTOOLCHAIN = ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 
-add_library(zcoap-server 
-            src/coap_root.c
+add_library(zcoap-server
             src/config.h
             src/platform.h
             src/zcoap-server.c
