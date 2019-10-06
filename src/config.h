@@ -127,6 +127,7 @@
  * own!
  */
 #include "zsnprintf.h"
+#define USE_ZCOAP_SNPRINTF
 #define ZCOAP_SNPRINTF zsnprintf
 #define ZCOAP_VSNPRINTF zvsnprintf
 #endif /* ZCOAP_SNPRINTF */

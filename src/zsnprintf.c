@@ -39,7 +39,10 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
+#include "config.h"
 #include "zsnprintf.h"
+
+#ifdef USE_ZCOAP_SNPRINTF
 
 #define MAX_WIDTH_SUB_SPEC "0-+ #"MAX_DEC_FMT_I32"."MAX_DEC_FMT_I32"ll"
 #define DTOCHAR(_d) ((_d) + '0')
@@ -1127,3 +1130,5 @@ size_t zsnprintf(__eds__ char *buf, size_t n, const char *fmt, ...)
     va_end(ap);
     return len;
 }
+
+#endif /* USE_ZCOAP_SNPRINTF */
