@@ -30,7 +30,7 @@
  * TODO: move to 10,000+, register with IANA
  */
 #define ZCOAP_EXTENSIONS
-#endif /*SUPPRESS_ZCOAP_EXTENSIONS */
+#endif /* SUPPRESS_ZCOAP_EXTENSIONS */
 
 #ifndef ZCOAP_MAX_BUF_SIZE
 /**

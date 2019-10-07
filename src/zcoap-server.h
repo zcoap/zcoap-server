@@ -116,7 +116,7 @@ typedef enum coap_content_format_e {
     ZFMT_I64,
     ZFMT_FLOAT,
     ZFMT_DOUBLE,
-    #endif /* ZCOAP_eXTENSIONS */
+    #endif /* ZCOAP_EXTENSIONS */
     // Per RFC7252, identifiers between 65000 and 65535 are reserved
     // for experiments and forbidden for inclusion on the wire as CoAP
     // Content Format options.  Thus, it is safe for us to use 65534
@@ -400,45 +400,45 @@ extern void coap_return_i64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t o
 extern void coap_return_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, float val);
 extern void coap_return_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, ZCOAP_DOUBLE val);
 
-extern void coap_get_bool(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_u16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_u32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_u64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_i16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_i32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_i64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_get_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
+extern void coap_get_bool(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_u16(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_u32(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_u64(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_i16(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_i32(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_i64(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_float(ZCOAP_METHOD_SIGNATURE);
+extern void coap_get_double(ZCOAP_METHOD_SIGNATURE);
 
-extern int coap_parse_bool(void *ascii, size_t len, bool *out, size_t *size1);
-extern int coap_parse_u16(void *ascii, size_t len, uint16_t *out, size_t *size1);
-extern int coap_parse_u32(void *ascii, size_t len, uint32_t *out, size_t *size1);
-extern int coap_parse_u64(void *ascii, size_t len, uint64_t *out, size_t *size1);
-extern int coap_parse_i16(void *ascii, size_t len, int16_t *out, size_t *size1);
-extern int coap_parse_i32(void *ascii, size_t len, int32_t *out, size_t *size1);
-extern int coap_parse_i64(void *ascii, size_t len, int64_t *out, size_t *size1);
-extern int coap_parse_float(void *ascii, size_t len, float *out, size_t *size1);
-extern int coap_parse_double(void *ascii, size_t len, ZCOAP_DOUBLE *out, size_t *size1);
+extern int coap_parse_bool(void *ascii, size_t len, bool *out);
+extern int coap_parse_unsigned(void *ascii, size_t len, unsigned *out);
+extern int coap_parse_ulong(void *ascii, size_t len, unsigned long *out);
+extern int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out);
+extern int coap_parse_int(void *ascii, size_t len, int *out);
+extern int coap_parse_long(void *ascii, size_t len, long *out);
+extern int coap_parse_llong(void *ascii, size_t len, long long *out);
+extern int coap_parse_float(void *ascii, size_t len, float *out);
+extern int coap_parse_double(void *ascii, size_t len, ZCOAP_DOUBLE *out);
 
-extern coap_code_t coap_parse_req_bool(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], bool *out);
-extern coap_code_t coap_parse_req_u16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], uint16_t *out);
-extern coap_code_t coap_parse_req_u32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], uint32_t *out);
-extern coap_code_t coap_parse_req_u64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], uint64_t *out);
-extern coap_code_t coap_parse_req_i16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], int16_t *out);
-extern coap_code_t coap_parse_req_i32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], int32_t *out);
-extern coap_code_t coap_parse_req_i64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], int64_t *out);
-extern coap_code_t coap_parse_req_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], float *out);
-extern coap_code_t coap_parse_req_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], ZCOAP_DOUBLE *out);
+extern coap_code_t coap_parse_req_bool(coap_ct_t ct, size_t len, void *payload, bool *out);
+extern coap_code_t coap_parse_req_u16(coap_ct_t ct, size_t len, void *payload, uint16_t *out);
+extern coap_code_t coap_parse_req_u32(coap_ct_t ct, size_t len, void *payload, uint32_t *out);
+extern coap_code_t coap_parse_req_u64(coap_ct_t ct, size_t len, void *payload, uint64_t *out);
+extern coap_code_t coap_parse_req_i16(coap_ct_t ct, size_t len, void *payload, int16_t *out);
+extern coap_code_t coap_parse_req_i32(coap_ct_t ct, size_t len, void *payload, int32_t *out);
+extern coap_code_t coap_parse_req_i64(coap_ct_t ct, size_t len, void *payload, int64_t *out);
+extern coap_code_t coap_parse_req_float(coap_ct_t ct, size_t len, void *payload, float *out);
+extern coap_code_t coap_parse_req_double(coap_ct_t ct, size_t len, void *payload, ZCOAP_DOUBLE *out);
 
-extern void coap_put_bool(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_u16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_u32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_u64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_i16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_i32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_i64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
-extern void coap_put_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const coap_node_t *node, ct_mask_t *ct_mask);
+extern void coap_put_bool(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_u16(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_u32(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_u64(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_i16(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_i32(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_i64(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_float(ZCOAP_METHOD_SIGNATURE);
+extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 
 extern void coap_init(coap_node_t *root); // <- init must be called against any URI trees before it is passed to the server!
 extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, coap_node_t *root); // <- server entry point!
