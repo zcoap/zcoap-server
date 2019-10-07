@@ -2224,7 +2224,7 @@ int coap_parse_float(void *ascii, size_t len, float *out, size_t *size1)
  * @param payload payload data
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t coap_parse_req_u64(coap_ct_t ct, size_t len, void *payload, uint64_t *out)
+coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(coap_ct_t ct, size_t len, void *payload, uint64_t *out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2365,11 +2365,8 @@ coap_code_t coap_parse_req_u64(coap_ct_t ct, size_t len, void *payload, uint64_t
  * @param out output location for successful parse.
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_llong(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], long long *out)
+coap_code_t __attribute__((nonnull (3, 4))) coap_parse_req_llong(size_t nopts, coap_msg_opt_t opts[], int64_t *out)
 {
-    if (req == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
     coap_code_t rc = 0;
     if (out == NULL) {
         rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2540,6 +2537,7 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_llong(coap_req_data_t
  * @param out output location for successful parse.
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+coap_code_t __attribute__((nonnull (3, 4))) coap_parse_req_llong(size_t nopts, coap_msg_opt_t opts[], int64_t *out)
 coap_code_t __attribute__((nonnull (1, 4))) coap_parse_req_ulong(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], unsigned long *out)
 {
     if (req == NULL) {
