@@ -383,8 +383,8 @@ extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_
 extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, void **payload);
 
 extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req);
-extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, void *payload);
-extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, void *payload);
+extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
+extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
 extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
 
