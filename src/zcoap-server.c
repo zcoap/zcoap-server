@@ -1673,6 +1673,7 @@ extern uint8_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *r
  *
  * Note: This function uses the c library function strtoull with radix
  *       unspecified.  Valid input representations are therefore:
+ *
  *          * decimal integers in the range 0 to 18446744073709551615
  *          * octal integers in the range 0 to 01777777777777777777777
  *          * hexidecimal integers in the range 0x0 to 0xFFFFFFFFFFFFFFFF
@@ -1698,10 +1699,10 @@ extern uint8_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *r
  *       So we presume the following of our strtoull:
  *
  *          * it will set and advance endptr on successful parse
- *          * it will return ULLONG_MIN or ULLONG_MAX on overflow
+ *          * it will return ULLONG_MAX on overflow
  *          * it may or may not set errno
  *          * but even it it sets errno, errno may not be thread safe
- *          * therefore, if strtoull returns ULLONG_MIN or ULLONG_MAX,
+ *          * therefore, if strtoull returns ULLONG_MAX,
  *            we manually audit for under and overflow
  *
  *       With this strategy, we retain full coverage for error conditions and
@@ -1727,10 +1728,10 @@ static int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
     if (!endptr || endptr == buf) {
         return EINVAL;
     } else if (*out == ULLONG_MAX) {
-        // Unfortunately, our c library's strtoull does not seem to set errno.  So
-        // sadly, we must manually verify the passed buffer isn't actually
-        // specifying ULLONG_MAX.  Only when we've ruled this out can we declare
-        // this an error condition.
+        // Our c library's strtoull may not set errno, or may not have any
+        // thread safety around errno.  So we must manually verify the passed
+        // buffer doesn't actually contain an integer minimum or maximum value.
+        // Only when we've ruled this out can we declare this an error condition.
         char *tok;
         if ((tok = strstr(buf, "0x")) || (tok = strstr(buf, "0X"))) {
             for (size_t i = 0; i < strlen("ffffffffffffffff"); ++i) { // tolower for 0xF
@@ -1768,15 +1769,16 @@ static int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
  *
  * Note: This function uses the standard c library function strtoll with radix
  *       unspecified.  Valid input representations are therefore:
+ *
  *          * decimal integers in the range -9223372036854775808 to 9223372036854775807
  *          * octal integers in the range 0 to 01777777777777777777777
  *          * hexidecimal integers in the range 0x0 to 0xFFFFFFFFFFFFFFFF
  *
- * Note: Some embedded C library strtoull implementations may not set errno
+ * Note: Some embedded C library strtoll implementations may not set errno
  *       on error.  And even if they do, we are left in a bind.  Where is
  *       errno?  Is this thread safe?
  *
- *       A concrete example: With reference to strtoull, the Microchip 16-Bit
+ *       A concrete example: With reference to strtoll, the Microchip 16-Bit
  *       Language Tools Libraries Reference Manual, Document DS50001456J
  *       describes:
  *
@@ -1790,18 +1792,18 @@ static int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
  *       unable to leverage errno to differentiate overflow conditions from
  *       those cases where the passed buffer does actually contain ULLONG_MAX.
  *
- *       So we presume the following of our strtoull:
+ *       So we presume the following of our strtoll:
  *
  *          * it will set and advance endptr on successful parse
- *          * it will return ULLONG_MIN or ULLONG_MAX on overflow
+ *          * it will return LLONG_MIN or LLONG_MAX on overflow
  *          * it may or may not set errno
  *          * but even it it sets errno, errno may not be thread safe
- *          * therefore, if strtoull returns ULLONG_MIN or ULLONG_MAX,
+ *          * therefore, if strtoll returns LLONG_MIN or LLONG_MAX,
  *            we manually audit for under and overflow
  *
  *       With this strategy, we retain full coverage for error conditions and
  *       also avoid any thread safety implications associated with the use of
- *       errno.  We also have a strtoull call that will be somewhat immune to
+ *       errno.  We also have a strtoll call that will be somewhat immune to
  *       changes in library behavior.
  *
  * @param ascii text to parse
@@ -1822,10 +1824,10 @@ static int coap_parse_llong(void *ascii, size_t len, long long *out)
     if (!endptr || endptr == buf) {
         return EINVAL;
     } else if (*out == LLONG_MAX) {
-        // Unfortunately, our c library strtoll does not seem to set errno.  So
-        // sadly, we must manually verify the passed buffer isn't actually
-        // specifying LLONG_MAX.  Only when we've ruled this out can we declare
-        // this an error condition.
+        // Our c library's strtull may not set errno, or may not have any
+        // thread safety around errno.  So we must manually verify the passed
+        // buffer doesn't actually contain an integer minimum or maximum value.
+        // Only when we've ruled this out can we declare this an error condition.
         char *tok;
         if ((tok = strstr(buf, "0x")) || (tok = strstr(buf, "0X"))) {
             for (size_t i = 1; i < strlen("fffffffffffffff"); ++i) { // tolower for 0xF
@@ -1878,34 +1880,37 @@ static int coap_parse_llong(void *ascii, size_t len, long long *out)
  *
  * Note: This function uses the c library function strtoul with radix
  *       unspecified.  Valid input representations are therefore:
+ *
  *          * decimal integers in the range 0 to 4294967295
  *          * octal integers in the range 0 to 037777777777
  *          * hexidecimal integers in the range 0x0 to 0xFFFFFFFF
  *
- * Note: This c library's strtoul implementation appears not to manipulate
- *       errno.  This is a deviation from standard behavior, and also deviates
- *       from the behavior Microchip describes in its Document DS50001456J,
- *       16-Bit Language Tools Libraries Reference Manual:
+ * Note: Some embedded C library strtoul implementations may not set errno
+ *       on error.  And even if they do, we are left in a bind.  Where is
+ *       errno?  Is this thread safe?
+ *
+ *       A concrete example: With reference to strtoul, the Microchip 16-Bit
+ *       Language Tools Libraries Reference Manual, Document DS50001456J
+ *       describes:
  *
  *           "If a range error occurs, errno will be set."
  *
- *       The function does, however, provide more than just atoi-like
- *       functionality.  For instance, non-overflow errors do properly reflect
- *       in endptr.  However, overflow simply results in return of ULONG_MAX.
+ *       This function, however, does NOT set errno on parse or range error.
  *
  *       It is suspected that this errno behavior, however undesirable, is
  *       employed to make this function thread-safe (whereas otherwise it would
  *       not be).  Regardless, we find ourselves in a position where we are
  *       unable to leverage errno to differentiate overflow conditions from
- *       those cases where the passed buffer does actually contain ULONG_MAX.
+ *       those cases where the passed buffer does actually contain ULLONG_MAX.
  *
- *       Since we find no useful information in errno anyway, we'll ignore it.
- *       That prevents us having to enforce a policy where, project-wide, all
- *       writes to errno would have to occur in a single context.
+ *       So we presume the following of our strtoul:
  *
- *       To differentiate overflow and those cases where the passed buffer does
- *       actually contain value ULONG_MAX, we will explicitly check for such
- *       possibilities.
+ *          * it will set and advance endptr on successful parse
+ *          * it will return ULONG_MAX on overflow
+ *          * it may or may not set errno
+ *          * but even it it sets errno, errno may not be thread safe
+ *          * therefore, if strtoul returns ULONG_MIN or ULONG_MAX,
+ *            we manually audit for under and overflow
  *
  *       With this strategy, we retain full coverage for error conditions and
  *       also avoid any thread safety implications associated with the use of
@@ -1930,10 +1935,10 @@ int coap_parse_ulong(void *ascii, size_t len, unsigned long *out)
     if (!endptr || endptr == buf) {
         return EINVAL;
     } else if (*out == ULONG_MAX) {
-        // Unfortunately, our c library's strtoul does not seem to set errno.  So
-        // sadly, we must manually verify the passed buffer isn't actually
-        // specifying ULONG_MAX.  Only when we've ruled this out can we declare
-        // this an error condition.
+        // Our c library's strtoul may not set errno, or may not have any
+        // thread safety around errno.  So we must manually verify the passed
+        // buffer doesn't actually contain an integer minimum or maximum value.
+        // Only when we've ruled this out can we declare this an error condition.
         char *tok;
         if ((tok = strstr(buf, "0x")) || (tok = strstr(buf, "0X"))) {
             for (size_t i = 0; i < strlen("ffffffff"); ++i) { // tolower for 0xF
@@ -1975,32 +1980,32 @@ int coap_parse_ulong(void *ascii, size_t len, unsigned long *out)
  *          * octal integers in the range 0 to 037777777777
  *          * hexidecimal integers in the range 0x0 to 0xFFFFFFFF
  *
- * Note: This c library's strtol implementation appears not to manipulate
- *       errno.  This is a deviation from standard behavior, and also deviates
- *       from the behavior Microchip describes in its Document DS50001456J,
- *       16-Bit Language Tools Libraries Reference Manual:
+ * Note: Some embedded C library strtol implementations may not set errno
+ *       on error.  And even if they do, we are left in a bind.  Where is
+ *       errno?  Is this thread safe?
+ *
+ *       A concrete example: With reference to strtol, the Microchip 16-Bit
+ *       Language Tools Libraries Reference Manual, Document DS50001456J
+ *       describes:
  *
  *           "If a range error occurs, errno will be set."
  *
- *       The function does, however, provide more than just atoi-like
- *       functionality.  For instance, non-overflow errors do properly reflect
- *       in endptr.  However, overflow simply results in return of LONG_MIN or
- *       LONG_MAX.
+ *       This function, however, does NOT set errno on parse or range error.
  *
  *       It is suspected that this errno behavior, however undesirable, is
  *       employed to make this function thread-safe (whereas otherwise it would
  *       not be).  Regardless, we find ourselves in a position where we are
  *       unable to leverage errno to differentiate overflow conditions from
- *       those cases where the passed buffer does actually contain LONG_MIN or
- *       LONG_MAX.
+ *       those cases where the passed buffer does actually contain ULLONG_MAX.
  *
- *       Since we find no useful information in errno anyway, we'll ignore it.
- *       That prevents us having to enforce a policy where, project-wide, all
- *       writes to errno would have to occur in a single context.
+ *       So we presume the following of our strtol:
  *
- *       To differentiate overflow and those cases where the passed buffer does
- *       actually contain value LONG_MIN or LONG_MAX, we will explicitly check
- *       for such possibilities.
+ *          * it will set and advance endptr on successful parse
+ *          * it will return LONG_MIN or LONG_MAX on overflow
+ *          * it may or may not set errno
+ *          * but even it it sets errno, errno may not be thread safe
+ *          * therefore, if strtol returns LONG_MIN or LONG_MAX,
+ *            we manually audit for under and overflow
  *
  *       With this strategy, we retain full coverage for error conditions and
  *       also avoid any thread safety implications associated with the use of
@@ -2025,10 +2030,10 @@ int coap_parse_long(void *ascii, size_t len, long *out)
     if (!endptr || endptr == buf) {
         return EINVAL;
     } else if (*out == LONG_MAX) {
-        // Unfortunately, our c library strtol does not seem to set errno.  So
-        // sadly, we must manually verify the passed buffer isn't actually
-        // specifying LONG_MAX.  Only when we've ruled this out can we declare
-        // this an error condition.
+        // Our c library's strtol may not set errno, or may not have any
+        // thread safety around errno.  So we must manually verify the passed
+        // buffer doesn't actually contain an integer minimum or maximum value.
+        // Only when we've ruled this out can we declare this an error condition.
         char *tok;
         if ((tok = strstr(buf, "0x")) || (tok = strstr(buf, "0X"))) {
             for (size_t i = 1; i < strlen("fffffff"); ++i) { // tolower for 0xF
@@ -2131,39 +2136,40 @@ int coap_parse_int(void *ascii, size_t len, int *out)
  * large, the function returns ENOMEM and writes the maximum size, which the
  * caller can use to construct a size1 option for the client error response.
  *
- * Note: This c library's strtof implementation appears not to manipulate
- *       errno.  This is a deviation from standard behavior.  It also deviates
- *       from Microchip's strtod description in its Document DS50001456J,
- *       16-Bit Language Tools Libraries Reference Manual:
+ * Note: Some embedded C library strtof implementations may not set errno
+ *       on error.  And even if they do, we are left in a bind.  Where is
+ *       errno?  Is this thread safe?
+ *
+ *       A concrete example: With reference to strtod, the Microchip 16-Bit
+ *       Language Tools Libraries Reference Manual, Document DS50001456J
+ *       describes:
  *
  *           "If a range error occurs, errno will be set."
  *
- *       The function does, however, provide more than just atof-like
- *       functionality.  For instance, non-overflow errors do properly reflect
- *       in endptr.  However, both underflow and overflow simply result in
- *       return of a minimum-sized normalized value.  This is a number with
- *       excess-127 exponent of 1 and a mantissa of 0 (with implicit leading 1).
+ *       This function, however, does NOT set errno on parse or range error.
  *
  *       It is suspected that this errno behavior, however undesirable, is
  *       employed to make this function thread-safe (whereas otherwise it would
  *       not be).  Regardless, we find ourselves in a position where we are
- *       unable to leverage errno to detect underflow and overflow conditions.
+ *       unable to leverage errno to differentiate overflow conditions from
+ *       those cases where the passed buffer does actually contain ULLONG_MAX.
  *
- *       Since we find no useful information in errno anyway, we'll ignore it.
- *       That prevents us having to enforce a policy where, project-wide, all
- *       writes to errno would have to occur in a single context.
+ *       So we presume the following of our strtol:
  *
- *       To identify underflow and overflow, we simply look for return values
- *       with magnitude of that minimum normalized quantity.  We'll return an
- *       error whenever these are seen.  This makes such a value an illegal
- *       input, even though it can technically be represented in the system.
- *       This is however a good tradeoff because checking for this value is fast
- *       and easy, and we anticipate no useful application for a client actually
- *       specifying this value.
+ *          * it will set and advance endptr on successful parse
+ *          * it may return HUGE_VALF or -HUGE_VALF on overflow
+ *          * it will return a value equal or smaller in magnitude to the smallest normal on underflow
+ *          * it may, as in the case of XC16, also return a value equal or smaller in magntude to the smallest normal on overflow
+ *          * it may or may not set errno
+ *          * but even it it sets errno, errno may not be thread safe
+ *          * therefore, we presume that all returns equal in magnitude to HUGE_VALF,
+ *          * or equal to or smaller than the smallest normal are overflow or underflow
  *
  *       With this strategy, we retain full coverage for error conditions and
  *       also avoid any thread safety implications associated with the use of
- *       errno.
+ *       errno.  We will presume that the set of values that may be erroneously
+ *       called out as underflow or overflow are not particularly useful to the
+ *       application.
  *
  * @param ascii text to parse
  * @param len text length in bytes
@@ -2183,12 +2189,85 @@ int coap_parse_float(void *ascii, size_t len, float *out)
     if (!endptr || endptr == buf) {
         return EINVAL;
     } else if (fabsf(*out) == HUGE_VALF) {
-        return ERANGE; // overflow
+        return ERANGE; // presume overflow
     } else {
         int exponent;
         frexpf(*out, &exponent);
-        if (exponent <= -126) {
-            return ERANGE; // underflow
+        if (exponent <= -126) { // 2^-126 is the smallest normal single-precision IEEE-754 float
+            return ERANGE; // presume underflow
+        }
+    }
+    return 0;
+}
+
+/**
+ * Interpret the passed buffer as an ascii representation of a double and, if
+ * successfully parsed, write to 'out'.
+ *
+ * On success, returns 0.  On failure, returns an error from errno.h.  If the
+ * user has passed non-null for output parameter 'size1' and the payload is too
+ * large, the function returns ENOMEM and writes the maximum size, which the
+ * caller can use to construct a size1 option for the client error response.
+ *
+ * Note: Some embedded C library strtod implementations may not set errno
+ *       on error.  And even if they do, we are left in a bind.  Where is
+ *       errno?  Is this thread safe?
+ *
+ *       A concrete example: With reference to strtod, the Microchip 16-Bit
+ *       Language Tools Libraries Reference Manual, Document DS50001456J
+ *       describes:
+ *
+ *           "If a range error occurs, errno will be set."
+ *
+ *       This function, however, does NOT set errno on parse or range error.
+ *
+ *       It is suspected that this errno behavior, however undesirable, is
+ *       employed to make this function thread-safe (whereas otherwise it would
+ *       not be).  Regardless, we find ourselves in a position where we are
+ *       unable to leverage errno to differentiate overflow conditions from
+ *       those cases where the passed buffer does actually contain ULLONG_MAX.
+ *
+ *       So we presume the following of our strtol:
+ *
+ *          * it will set and advance endptr on successful parse
+ *          * it may return HUGE_VAL or -HUGE_VAL on overflow
+ *          * it will return a value equal or smaller in magnitude to the smallest normal on underflow
+ *          * it may, as in the case of XC16, also return a value equal or smaller in magntude to the smallest normal on overflow
+ *          * it may or may not set errno
+ *          * but even it it sets errno, errno may not be thread safe
+ *          * therefore, we presume that all returns equal in magnitude to HUGE_VAL,
+ *          * or equal to or smaller than the smallest normal are overflow or underflow
+ *
+ *       With this strategy, we retain full coverage for error conditions and
+ *       also avoid any thread safety implications associated with the use of
+ *       errno.  We will presume that the set of values that may be erroneously
+ *       called out as underflow or overflow are not particularly useful to the
+ *       application.
+ *
+ * @param ascii text to parse
+ * @param len text length in bytes
+ * @param out (out) number parsed from the caller-provided text
+ * @return 0 on success, an appropriate errno on error
+ */
+int coap_parse_double(void *ascii, size_t len, ZCOAP_DOUBLE *out)
+{
+    if (len >= ZCOAP_MAX_BUF_SIZE) {
+        return ENOMEM;
+    }
+    char buf[len + 1];
+    ZCOAP_MEMCPY(buf, ascii, len);
+    buf[len] = '\0'; // internally, we need strings null-terminated
+    char *endptr = NULL;
+    *out = strtod(buf, &endptr);
+    if (!endptr || endptr == buf) {
+        return EINVAL;
+    } else if (fabs(*out) == HUGE_VAL) {
+        return ERANGE; // presume overflow
+    } else {
+        int exponent;
+        frexp(*out, &exponent);
+        if (exponent <= -1022) { // 2^-1022 is the smallest normal double-precision IEEE-754 float
+            return ERANGE; // presume underflow
         }
     }
     return 0;
