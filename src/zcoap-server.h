@@ -211,6 +211,7 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
  * @param req incoming CoAP message with request-centric implementation metadata
  */
 typedef void __attribute__((nonnull (1))) (*coap_discard_t)(coap_req_data_t *req);
+
 /**
  * coap_acker_t
  *
@@ -301,7 +302,7 @@ struct coap_req_data_s {
      * May be left NULL if stand-alone ACK and non-piggy-backed responses are
      * not needed.
      */
-    coap_acker_t acker;
+    coap_acker_t *acker;
     /**
      * Implementation-specific responder function.  For issuing both
      * piggy-backed and non-piggy-backed responses.  An implicit contract
