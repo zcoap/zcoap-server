@@ -8,6 +8,7 @@
 #ifndef ZCOAP_SERVER_H
 #define ZCOAP_SERVER_H
 
+#include <stdbool.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include "config.h"
@@ -75,7 +76,7 @@ enum {
 #define COAP_CODE_BITS_CLASS 3
 #define COAP_CODE_BITS_DETAIL 5
 #define COAP_CODE_MASK_CLASS ((1U << COAP_CODE_BITS_CLASS) - 1)
-#define COAP_CODE_MASK_DETAIL ((1U << cOAP_CODE_BITS_DETAIL) - 1)
+#define COAP_CODE_MASK_DETAIL ((1U << COAP_CODE_BITS_DETAIL) - 1)
 typedef uint8_t coap_code_t;
 #define COAP_CODE(_class, _detail) ((((_class) & COAP_CODE_MASK_CLASS) << COAP_CODE_BITS_DETAIL) | ((_detail) & COAP_CODE_MASK_DETAIL))
 
@@ -121,7 +122,7 @@ typedef enum coap_content_format_e {
     // Content Format options.  Thus, it is safe for us to use 65534
     // internally to signal that no content format option was enclosed
     // in a request.
-    ZCOAP_FMT_NONE = 0xfffe
+    ZCOAP_FMT_NONE = 0xfffe,
     // Per RFC7252, identifiers between 65000 and 65535 are reserved
     // for experiments and forbidden for inclusion on the wire as CoAP
     // Content Format options.  Thus, it is safe for us to use 65535
@@ -168,7 +169,7 @@ extern void set_ct_mask_literal(ct_mask_t *mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE coap_node_t *node, coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], coap_ct_t ct, size_t len, void *payload, ct_mask_t *ctmask
+#define ZCOAP_METHOD_SIGNATURE const coap_node_t *node, coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], coap_ct_t ct, size_t len, void *payload, ct_mask_t *ctmask
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -180,7 +181,7 @@ extern void set_ct_mask_literal(ct_mask_t *mask, coap_ct_t ct);
  *
  * @param ... zero or more COAP_FMT indicators, terminated with ZCOAP_FMT_SENTINEL
  */
-#define ZCOAP_METHOD_HEADER(...) { if (ct_mask) { set_ct_mask(ct_mask, __VA_ARGS__); return; }
+#define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; }
 
 
 typedef struct coap_msg_s {
@@ -230,8 +231,8 @@ typedef void __attribute__((nonnull (1))) (*coap_discard_t)(coap_req_data_t *req
  *
  * @param req incoming CoAP request with implementation-specific metadata
  */
-typedef void __attribute__((nonnull (1))) (*coap_acker_t)(coap_req_data_t *req, coap_ack_t *ack)
-typedef void __attribute__((nonnull (1))) (*coap_responder_t)(coap_req_data_t *req, size_t len, coap_msg_t *rsp)
+typedef void __attribute__((nonnull (1))) (*coap_acker_t)(coap_req_data_t *req, coap_msg_t *ack);
+typedef void __attribute__((nonnull (1))) (*coap_responder_t)(coap_req_data_t *req, size_t len, coap_msg_t *rsp);
 
 /**
  */
@@ -344,7 +345,7 @@ typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile voi
  */
 typedef int (*coap_gen_t)(coap_meta_t *iterator, coap_node_t *object);
 
-struct coap_obj_s {
+struct coap_node_s {
     const char *name; // node path segment
     volatile void *data; // node data pointer
     const char *fmt; // print format for plain text responses; if NULL, zcoap.c utility GET functions use default format
@@ -382,8 +383,8 @@ extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_
 extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, void **payload);
 
 extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req);
-extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, void *payload, io_cb_t cb, void *cbdata);
-extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, uint8_t fmt, size_t pl_len, void *payload);
+extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, void *payload);
+extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, void *payload);
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
 extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
 
@@ -442,4 +443,5 @@ extern void coap_init(coap_node_t *root); // <- init must be called against any 
 extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, coap_node_t *root); // <- server entry point!
 
 extern const coap_node_t wellknown_uri;
+
 #endif	/* ZCOAP_SERVER_H */

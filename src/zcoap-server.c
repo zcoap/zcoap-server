@@ -9,7 +9,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <float.h>
+#include <limits.h>
 #include "zcoap-server.h"
+
+#define MIN(_a, _b) (_a < _b ? _a : _b)
 
 #define COAP_VERSION 1
 #define COAP_MAX_TKL 8
@@ -236,8 +239,8 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
                 if (!parent_href_match && !href_match((*c)->name, href_filter)) {
                     continue;
                 }
-            } else if ((*c)->name[0] == '.' || (*c)->deprecated) {
-                continue; // suppress output of hidden and deprecated elements
+            } else if ((*c)->name[0] == '.' || (*c)->hidden) {
+                continue; // suppress output of hidden elements
             } else if (!(*c)->GET && !(*c)->PUT && !(*c)->POST && !(*c)->DELETE) {
                 continue; // suppress output of nodes with no methods
             }
@@ -260,8 +263,8 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
                     if (!parent_href_match && !href_match(dynamic_node.name, href_filter)) {
                         continue;
                     }
-                } else if (dynamic_node.name[0] == '.' || dynamic_node.deprecated) {
-                    continue; // suppress output of hidden and deprecated elements
+                } else if (dynamic_node.name[0] == '.' || dynamic_node.hidden) {
+                    continue; // suppress output of hidden elements
                 } else if (!dynamic_node.GET && !dynamic_node.PUT && !dynamic_node.POST && !dynamic_node.DELETE) {
                     continue; // suppress output of nodes with no methods
                 }
@@ -276,8 +279,8 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
         for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
             if ((*c)->name == NULL) {
                 continue; // suppress output of unnamed elements
-            } else if (!href_filter->str && ((*c)->name[0] == '.' || (*c)->deprecated)) {
-                continue; // suppress output of hidden and deprecated elements
+            } else if (!href_filter->str && ((*c)->name[0] == '.' || (*c)->hidden)) {
+                continue; // suppress output of hidden elements
             }
             size_t cplen = strlen((*c)->name);
             char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
@@ -299,8 +302,8 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
                 }
                 if (dynamic_node.name == NULL) {
                     continue; // suppress output of unnamed elements
-                } else if (!href_filter->str && (dynamic_node.name[0] == '.' || dynamic_node.deprecated)) {
-                    continue; // suppress output of hidden and deprecated elements
+                } else if (!href_filter->str && (dynamic_node.name[0] == '.' || dynamic_node.hidden)) {
+                    continue; // suppress output of hidden elements
                 }
                 size_t cplen = strlen(dynamic_node.name);
                 char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
@@ -420,17 +423,17 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
     }
     const coap_node_t *root = node->parent->parent; // locate root at /.well-known/core/../../
     const href_filter_t href_filter = get_href_filter(nopts, opts);
-    size_t len = snprintf_coap_tree(NULL, 0, root, &href_filter);
-    char *buf = ZCOAP_MALLOC(len + 1);
+    size_t wkn_len = snprintf_coap_tree(NULL, 0, root, &href_filter);
+    char *buf = ZCOAP_MALLOC(wkn_len + 1);
     if (buf == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
-    len = snprintf_coap_tree(buf, len + 1, root, &href_filter);
-    if (len && buf[len - 1] == ',') {
-        --len;
+    wkn_len = snprintf_coap_tree(buf, wkn_len + 1, root, &href_filter);
+    if (wkn_len && buf[wkn_len - 1] == ',') {
+        --wkn_len;
     }
-    coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_LINK, len, buf);
+    coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_LINK, wkn_len, buf);
     ZCOAP_FREE(buf);
 }
 static const coap_node_t core_uri = { .name = "core", .GET = &coap_get_wellknown_core };
@@ -522,7 +525,7 @@ static uint8_t *stuff_option(uint32_t *acc, uint16_t optnum, uint16_t optlen, co
         opd_ex_bytes = 1;
     } else {
         *buf |= 14 << 4;
-        uint16_t net = hton(delta - 269);
+        uint16_t net = ZCOAP_HTONS(delta - 269);
         ZCOAP_MEMCPY(buf + 1, &net, sizeof(net));
         opd_ex_bytes = 2;
     }
@@ -536,7 +539,7 @@ static uint8_t *stuff_option(uint32_t *acc, uint16_t optnum, uint16_t optlen, co
         opl_ex_bytes = 1;
     } else {
         *buf |= 14;
-        uint16_t net = hton(optlen - 269);
+        uint16_t net = ZCOAP_HTONS(optlen - 269);
         ZCOAP_MEMCPY(buf + 1 + opd_ex_bytes, &net, sizeof(net));
         opl_ex_bytes = 2;
     }
@@ -651,8 +654,8 @@ void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req)
     ZCOAP_MEMCPY(&ack, req->msg, sizeof(ack));
     ack.tkl = 0;
     ack.type = COAP_TYPE_ACK;
-    ack.code.class = 0;
-    ack.code.detail = 0;
+    ack.code.code_class = 0;
+    ack.code.code_detail = 0;
     ((*req->acker)(req, &ack));
     // On ACK dispatch, hijack req->type and change to NON.  This will illicit
     // non-piggy-backed response behavior in coap_rsp().
@@ -707,7 +710,7 @@ void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t cod
     }
     // Insert code, options and payload.
     rsp->code = code;
-    uint8_t *opt_ptr = COAP_OPTS(msg);
+    uint8_t *opt_ptr = COAP_OPTS(rsp);
     uint8_t *pl_ptr = stuff_options(opt_ptr, nopts, opts);
     if (pl_len && payload) {
         *pl_ptr = COAP_PAYLOAD_MARKER;
@@ -715,7 +718,7 @@ void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t cod
         ZCOAP_MEMCPY(pl_ptr, payload, pl_len);
     }
     // Transmit the response!
-    ((*req->responder)(req, alen, rsp);
+    (*req->responder)(req, alen, rsp);
     // Free our memory and cleanup.
     ZCOAP_ALLOCA_FREE(rsp);
     coap_discard(req);
@@ -746,7 +749,7 @@ void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_co
     } else {
         // Nope, we need two bytes.  Convert to big-endian though
         // for the wire.
-        ct = hton(ct);
+        ct = ZCOAP_HTONS(ct);
         opts->val = &ct;
         opts->len = sizeof(ct);
     }
@@ -3218,7 +3221,7 @@ void coap_printf(coap_req_data_t *req, const char *fmt, ...)
  */
 static bool host_is_little_endian(void)
 {
-    if (hton(42) != 42) {
+    if (ZCOAP_HTONS(42) != 42) {
         return true;
     } else {
         return false;
@@ -3341,7 +3344,7 @@ void coap_return_bool(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[],
         case ZEPTO_FMT_U16:
         case ZEPTO_FMT_I16: {
             int16_t _val = TO_ZCOAP_BOOL(val);
-            _val = hton(_val);
+            _val = ZCOAP_HTONS(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), *cf, sizeof(_val), &_val);
             break;
         }
@@ -3410,7 +3413,7 @@ void coap_return_u16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], 
         #ifdef ZEPTO_COAP_EXTENSIONS
         case ZEPTO_FMT_AUTO:
         case ZEPTO_FMT_U16:
-            val = hton(val);
+            val = ZCOAP_HTONS(val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_U16, sizeof(val), &val);
             break;
         case ZEPTO_FMT_U32:
@@ -3575,7 +3578,7 @@ void coap_return_i16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], 
         #ifdef ZEPTO_COAP_EXTENSIONS
         case ZEPTO_FMT_AUTO:
         case ZEPTO_FMT_I16:
-            val = hton(val);
+            val = ZCOAP_HTONS(val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_I16, sizeof(val), &val);
             break;
         case ZEPTO_FMT_I32: {
