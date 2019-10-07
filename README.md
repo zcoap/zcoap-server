@@ -33,6 +33,8 @@ Building and running the example in Visual Studio is just as easy.
 
 First, you will need to have Linux/C++ "workload" enabled for Visual Studio.  This is a check-box you were offered when installing Visual Studio.  It's easy to add this after the fact too here are instructions: https://docs.microsoft.com/en-us/cpp/linux/download-install-and-setup-the-linux-development-workload?view=vs-2019
 
+Holy cow, it's so easy though!
+
 Open Visual Studio but don't open a project.  On the bottom right of the splash screen there's a button that says "Continue Without Code."
 
 Then choose File->Open->CMake... and select the CMakeLists file at the root of the source tree.
