@@ -1715,7 +1715,7 @@ extern uint8_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *r
  * @param out (out) number parsed from the caller-provided text
  * @return 0 on success, an appropriate errno on error
  */
-static int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
+int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
 {
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
@@ -1811,7 +1811,7 @@ static int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out)
  * @param out (out) number parsed from the caller-provided text
  * @return 0 on success, an appropriate errno on error
  */
-static int coap_parse_llong(void *ascii, size_t len, long long *out)
+int coap_parse_llong(void *ascii, size_t len, long long *out)
 {
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
@@ -2274,8 +2274,7 @@ int coap_parse_double(void *ascii, size_t len, ZCOAP_DOUBLE *out)
 }
 
 /**
- * Parse a uint64 from a CoAP payload.  Transmit an appropriate CoAP error
- * status response on error.
+ * Parse a uint64 from a CoAP payload.
  *
  * @param ct payload content type (ZCOAP_FMT_NONE if unspecified)
  * @param len payload length
@@ -2316,7 +2315,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(coap_ct_t ct, size
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
@@ -2328,8 +2327,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(coap_ct_t ct, size
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
             if (pval < 0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2353,7 +2351,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(coap_ct_t ct, size
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval < 0) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
@@ -2415,8 +2413,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(coap_ct_t ct, size
 }
 
 /**
- * Parse an int64 from a CoAP payload.  Transmit an appropriate CoAP error
- * status response on error.
+ * Parse an int64 from a CoAP payload.
  *
  * @param ct payload content type (ZCOAP_FMT_NONE if unspecified)
  * @param len payload length
@@ -2434,8 +2431,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2445,8 +2441,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2456,14 +2451,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval > INT64_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2471,8 +2464,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2482,8 +2474,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2493,49 +2484,42 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case ZEPTO_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
         case ZEPTO_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ntohf(pval);
             if (pval < INT64_MIN || pval > INT64_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
         case ZEPTO_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHD(pval);
             if (pval < INT64_MIN || pval > INT64_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
@@ -2544,12 +2528,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            break;
-    }
-    if (rc) {
-        coap_status_rsp(req, rc);
-        return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -2558,21 +2537,16 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(coap_ct_t ct, size
     if ((ec = coap_parse_llong(payload, len, out))) {
         switch (ec) {
             case ENOMEM:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-                coap_client_err_req_too_large(req, size1);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
             default:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
 }
 
 /**
- * Parse a uint32 from a CoAP payload.  Transmit an appropriate CoAP error
- * status response on error.
+ * Parse a uint32 from a CoAP payload.
  *
  * @param ct payload content type (ZCOAP_FMT_NONE if unspecified)
  * @param len payload length
@@ -2590,8 +2564,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2601,8 +2574,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2612,14 +2584,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval > UINT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2627,14 +2597,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
             if (pval < 0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2642,14 +2610,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                    break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
             if (pval < 0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2657,14 +2623,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval < 0 || pval > UINT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2672,38 +2636,32 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case ZEPTO_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ntohf(pval);
             if (pval < 0.0 || pval > UINT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
         case ZEPTO_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHD(pval);
             if (pval < 0.0 || pval > UINT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
@@ -2712,12 +2670,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            break;
-    }
-    if (rc) {
-        coap_status_rsp(req, rc);
-        return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -2727,21 +2680,16 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(coap_ct_t ct, size
     if ((ec = coap_parse_ulong(payload, len, out, &size1))) {
         switch (ec) {
             case ENOMEM:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-                coap_client_err_req_too_large(req, size1);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
             default:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
 }
 
 /**
- * Parse an int32 from a CoAP payload.  Transmit an appropriate CoAP error
- * status response on error.
+ * Parse an int32 from a CoAP payload.
  *
  * @param ct payload content type (ZCOAP_FMT_NONE if unspecified)
  * @param len payload length
@@ -2759,8 +2707,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2770,14 +2717,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
             if (pval > INT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2785,14 +2730,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval > INT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2800,8 +2743,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2811,8 +2753,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2822,14 +2763,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             if (pval < INT32_MIN || pval > INT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -2837,38 +2776,32 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case ZEPTO_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ntohf(pval);
             if (pval < INT32_MIN || pval > INT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
         case ZEPTO_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHD(pval);
             if (pval < INT32_MIN || pval > INT32_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             if (pval - *out != 0.0) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             return 0;
         }
@@ -2877,12 +2810,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            break;
-    }
-    if (rc) {
-        coap_status_rsp(req, rc);
-        return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -2892,21 +2820,16 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(coap_ct_t ct, size
     if ((ec = coap_parse_long(payload, len, out, &size1))) {
         switch (ec) {
             case ENOMEM:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-                coap_client_err_req_too_large(req, size1);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
             default:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
 }
 
 /**
- * Parse a float from a CoAP payload.  Transmit an appropriate CoAP error
- * status response on error.
+ * Parse a float from a CoAP payload
  *
  * @param ct payload content type (ZCOAP_FMT_NONE if unspecified)
  * @param len payload length
@@ -2924,8 +2847,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2935,8 +2857,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2946,19 +2867,17 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
         case ZEPTO_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -2968,8 +2887,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -2979,19 +2897,17 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
         case ZEPTO_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = ntohf(pval);
@@ -3000,14 +2916,12 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_DOUBLE: {
             le pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHD(pval);
             if (fabs(pval) > FLT_MAX) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             *out = pval;
             return 0;
@@ -3017,12 +2931,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            break;
-    }
-    if (rc) {
-        coap_status_rsp(req, rc);
-        return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -3032,13 +2941,9 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
     if ((ec = coap_parse_float(payload, len, out, &size1))) {
         switch (ec) {
             case ENOMEM:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-                coap_client_err_req_too_large(req, size1);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
             default:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
@@ -3064,8 +2969,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -3075,8 +2979,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -3086,19 +2989,17 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
         case ZEPTO_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
@@ -3108,8 +3009,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
@@ -3119,19 +3019,17 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
-            pval = ZCOAP_NTOHLl(pval);
+            pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             return 0;
         }
         case ZEPTO_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = ntohf(pval);
@@ -3140,8 +3038,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case ZEPTO_FMT_DOUBLE: {
             le pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                break;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHD(pval);
@@ -3153,12 +3050,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            break;
-    }
-    if (rc) {
-        coap_status_rsp(req, rc);
-        return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -3168,13 +3060,9 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(coap_ct_t ct, si
     if ((ec = coap_parse_double(payload, len, out, &size1))) {
         switch (ec) {
             case ENOMEM:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-                coap_client_err_req_too_large(req, size1);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
             default:
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
@@ -3200,9 +3088,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_uint(coap_ct_t ct, siz
         return  rc;
     }
     if (u32 > UINT_MAX) {
-        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        coap_status_rsp(req, rc);
-        return rc;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else {
         *out = u32;
         return 0;
@@ -3227,9 +3113,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i16(coap_ct_t ct, size
         return  rc;
     }
     if (i32 > INT_MAX || i32 < INT_MIN) {
-        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        coap_status_rsp(req, rc);
-        return rc;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else {
         *out = i32;
         return 0;
@@ -3256,9 +3140,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_bool(coap_ct_t ct, siz
         case ZEPTO_FMT_BOOL: {
             zcoap_bool_t pval;
             if (len != sizeof(pval)) {
-                rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-                coap_status_rsp(req, rc);
-                return rc;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
             ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = TO_ZCOAP_BOOL(pval);
@@ -3269,9 +3151,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_bool(coap_ct_t ct, siz
         case COAP_FMT_TEXT:
             break; // handled below
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
-            coap_status_rsp(req, rc);
-            return rc;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT);
     }
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
@@ -3288,6 +3168,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_bool(coap_ct_t ct, siz
     // Truthiness strings were not found.  Fall back to attempting a numerical
     // text parse.
     int ival;
+    int rc;
     if ((rc = coap_parse_req_int(req, nopts, opts, &ival))) { // issues response and calls discard on our behalf if a parse error occurs
         return  rc;
     }
@@ -4187,8 +4068,6 @@ void coap_get_double(ZCOAP_METHOD_SIGNATURE)
  * to the node's data pointer.
  *
  * @param req originating CoAP request
- *
- * @param req originating CoAP request
  * @param nopts number of enclosed options
  * @param opts request options array
  * @param node server URI tree node
@@ -4201,7 +4080,9 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     bool val;
-    if (coap_parse_req_bool(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_bool(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     if (node->validate && (err = (*node->validate)(&val))) {
@@ -4225,8 +4106,6 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
  * to the node's data pointer.
  *
  * @param req originating CoAP request
- *
- * @param req originating CoAP request
  * @param nopts number of enclosed options
  * @param opts request options array
  * @param node server URI tree node
@@ -4239,7 +4118,9 @@ void coap_put_u16(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     uint16_t val;
-    if (coap_parse_req_u16(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_u16(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err = NULL;
@@ -4278,7 +4159,9 @@ void coap_put_u32(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     uint32_t val;
-    if (coap_parse_req_u32(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_u32(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err;
@@ -4315,7 +4198,9 @@ void coap_put_u64(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     uint64_t val;
-    if (coap_parse_req_u64(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_u64(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err;
@@ -4354,7 +4239,9 @@ void coap_put_i16(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     int16_t val;
-    if (coap_parse_req_i16(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_i16(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err;
@@ -4391,7 +4278,9 @@ void coap_put_i32(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     int32_t val;
-    if (coap_parse_req_int32(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_i32(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err = NULL;
@@ -4428,7 +4317,9 @@ void coap_put_i64(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     int64_t val;
-    if (coap_parse_req_int64(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_i64(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err = NULL;
@@ -4464,7 +4355,9 @@ void coap_put_float(ZEPTO_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     float val;
-    if (coap_parse_req_float(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_float(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err;
@@ -4500,7 +4393,9 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
     #endif
     ZCOAP_FMT_SENTINEL);
     ZCOAP_DOUBLE val;
-    if (coap_parse_req_double(req, nopts, opts, &val)) { // issues response and calls discard on our behalf if a parse error occurs
+    coap_code_t code;
+    if ((code = coap_parse_req_double(ct, len, payload, &val))) {
+        coap_status_rsp(req, code);
         return;
     }
     const char *err;
