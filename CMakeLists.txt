@@ -7,16 +7,19 @@ enable_testing()
 message(STATUS "\r\n********************************************\r\n-- zcoap-server cmake - entry")
 
 #Print important settings
-message(STATUS "\r\nTOOLCHAIN = ${CMAKE_TOOLCHAIN_FILE}")
+message(STATUS "TOOLCHAIN = ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 
-add_library(zcoap-server
-            src/config.h
-            src/platform.h
-            src/zcoap-server.c
-            src/zcoap-server.h
-            src/zsnprintf.c
-            src/zsnprintf.h)
+#add_library(zcoap-server
+#            src/config.h
+#            src/platform.h
+#            src/zcoap-server.c
+#            src/zcoap-server.h
+#            src/zsnprintf.c
+#            src/zsnprintf.h)
+
+add_executable(example-server-win32
+               examples/example-server-win32.c)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

@@ -1,4 +1,5 @@
 #include "zcoap-server.h"
+#include <stdio.h>
 
 static const coap_node_t core = { .name = "core", .GET = &dump_coap_tree };
 static const coap_node_t *wellknown_children[] = { &core, NULL };
