@@ -894,7 +894,7 @@ void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t * const req, c
  * @param val (out) parsed option value
  * @return 0 on success, else a CoAP error code
  */
-static coap_code_t opt_next(uint8_t **buf, size_t *remain, uint32_t *num, uint16_t *len, void **val)
+static coap_code_t opt_next(const uint8_t **buf, size_t * const remain, uint32_t * const num, uint16_t * const len, const void **val)
 {
     if (!*remain) {
         return 0;
@@ -992,12 +992,12 @@ static coap_code_t __attribute__((nonnull (1, 2))) coap_count_opts(coap_req_data
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
     remain -= req->msg->tkl;
-    uint8_t *ptr = COAP_OPTS(req->msg);
+    const uint8_t *ptr = COAP_OPTS(req->msg);
     uint32_t opt_num = 0;
     *nopts = 0;
     while (remain && *ptr != COAP_PAYLOAD_MARKER) {
         uint16_t opt_len; // discard
-        void *opt_val; // discard
+        const void *opt_val; // discard
         coap_code_t rc;
         if ((rc = opt_next(&ptr, &remain, &opt_num, &opt_len, &opt_val))) {
             return rc;
@@ -1035,7 +1035,7 @@ static coap_code_t __attribute__((nonnull (1, 3))) coap_get_opts(coap_req_data_t
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
     remain -= req->msg->tkl;
-    uint8_t *ptr = COAP_OPTS(req->msg);
+    const uint8_t *ptr = COAP_OPTS(req->msg);
     uint32_t opt_num = 0;
     for (size_t i = 0; i < nopts; ++i) {
         if (!remain || *ptr == COAP_PAYLOAD_MARKER) {
@@ -1297,7 +1297,7 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
  * @param q node to compare
  * @return 1 if p>q, 0 if p==q, -1 if p<q
  */
-static int coap_node_cmp(const void *p, const void *q)
+static int coap_node_cmp(const void * const p, const void * const q)
 {
     const coap_node_t *a = *(const coap_node_t **)p;
     const coap_node_t *b = *(const coap_node_t **)q;
@@ -1319,7 +1319,7 @@ static int coap_node_cmp(const void *p, const void *q)
  * @param node URI tree node for which to count children
  * @return number of children found
  */
-static size_t coap_count_children(const coap_node_t *node)
+static size_t coap_count_children(const coap_node_t * const node)
 {
     size_t count = 0;
     const coap_node_t **child = node->children;
@@ -1520,7 +1520,7 @@ void coap_rx(coap_req_data_t * const req, const coap_node_t * const root)
  *
  * @param node tree node for which to sort children
  */
-static void coap_sort_children(const coap_node_t *node)
+static void coap_sort_children(const coap_node_t * const node)
 {
     size_t count = coap_count_children(node);
     if (!count) {
@@ -1535,7 +1535,7 @@ static void coap_sort_children(const coap_node_t *node)
  *
  * @param node root node from which to iterate
  */
-static void iter_coap_sort(const coap_node_t *node)
+static void iter_coap_sort(const coap_node_t * const node)
 {
     coap_sort_children(node);
     for (const coap_node_t * const *c = node->children; c != NULL && *c != NULL; ++c) {
@@ -1569,7 +1569,7 @@ static void iter_coap_sort(const coap_node_t *node)
  *
  * @param root pointer to the root node of the tree to init
  */
-void coap_init(coap_node_t *root)
+void coap_init(const coap_node_t * const root)
 {
     iter_coap_sort(root);
 }
