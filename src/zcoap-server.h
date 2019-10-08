@@ -288,7 +288,7 @@ struct coap_req_data_s {
      * If the implementation requires no explicit action for 'discard', this
      * may be left NULL.
      */
-    coap_discard_t *discard;
+    coap_discard_t discard;
     /*
      * acker
      *
@@ -303,7 +303,7 @@ struct coap_req_data_s {
      * May be left NULL if stand-alone ACK and non-piggy-backed responses are
      * not needed.
      */
-    coap_acker_t *acker;
+    coap_acker_t acker;
     /**
      * Implementation-specific responder function.  For issuing both
      * piggy-backed and non-piggy-backed responses.  An implicit contract
