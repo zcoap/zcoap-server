@@ -8,8 +8,9 @@
 #ifndef ZCOAP_SERVER_H
 #define ZCOAP_SERVER_H
 
-#include <stdbool.h>
+#include <limits.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include "config.h"
 
@@ -411,7 +412,7 @@ extern void coap_get_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_double(ZCOAP_METHOD_SIGNATURE);
 
 extern int coap_parse_bool(void *ascii, size_t len, bool *out);
-extern int coap_parse_unsigned(void *ascii, size_t len, unsigned *out);
+extern int coap_parse_uint(void *ascii, size_t len, unsigned *out);
 extern int coap_parse_ulong(void *ascii, size_t len, unsigned long *out);
 extern int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out);
 extern int coap_parse_int(void *ascii, size_t len, int *out);
@@ -439,6 +440,37 @@ extern void coap_put_i32(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_i64(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
+
+#if INT_MAX == INT16_MAX
+#define coap_return_uint coap_return_u16
+#define coap_return_int coap_return_i16
+#define coap_get_uint coap_get_u16
+#define coap_get_int coap_get_i16
+#define coap_parse_req_uint coap_parse_req_u16
+#define coap_parse_req_int coap_parse_req_i16
+#define coap_put_uint coap_put_u16
+#define coap_put_int coap_put_i16
+#elif INT_MAX == INT32_MAX
+#define coap_return_uint coap_return_u32
+#define coap_return_int coap_return_i32
+#define coap_get_uint coap_get_u32
+#define coap_get_int coap_get_i32
+#define coap_parse_req_uint coap_parse_req_u32
+#define coap_parse_req_int coap_parse_req_i32
+#define coap_put_uint coap_put_u32
+#define coap_put_int coap_put_i32
+#elif INT_MAX == INT64_MAX
+#define coap_return_uint coap_return_u64
+#define coap_return_int coap_return_i64
+#define coap_get_uint coap_get_u64
+#define coap_get_int coap_get_i64
+#define coap_parse_req_uint coap_parse_req_u64
+#define coap_parse_req_int coap_parse_req_i64
+#define coap_put_uint coap_put_u64
+#define coap_put_int coap_put_i64
+#else
+#error no support for INT_MAX
+#endif
 
 extern void coap_init(coap_node_t *root); // <- init must be called against any URI trees before it is passed to the server!
 extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, coap_node_t *root); // <- server entry point!

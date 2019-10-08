@@ -36,6 +36,8 @@
  * to the library implementation.
  */
 
+#include <limits.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
@@ -79,7 +81,7 @@ typedef struct flags_s {
 #define zftoa zftoaf
 #endif
 
-static char *zxtoa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
+static char *zx16toa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t d3, d2, d1, d0;
     unsigned first_digit = 0;
@@ -119,7 +121,7 @@ static char *zxtoa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-static char *zlxtoa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
+static char *zx32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t d7, d6, d5, d4, d3, d2, d1, d0;
     unsigned first_digit = 0;
@@ -167,7 +169,7 @@ static char *zlxtoa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-static char *zllxtoa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
+static char *zx64toa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t d15, d14, d13, d12, d11, d10, d9, d8, d7, d6, d5, d4, d3, d2, d1, d0;
     unsigned first_digit = 0;
@@ -244,7 +246,7 @@ static char *zllxtoa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
     }\
 })
 
-static char *zitoa(char *buf, int16_t n, unsigned width, fmt_flags_t flags)
+static char *zi16toa(char *buf, int16_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t d4, d3, d2, d1, q; // yes, 8 bits are enough for these
     uint16_t d0;
@@ -313,7 +315,7 @@ static char *zitoa(char *buf, int16_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-static char *zutoa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
+static char *zu16toa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t d4, d3, d2, d1, q; // yes, 8 bits are enough for these
     uint16_t d0;
@@ -377,7 +379,7 @@ static char *zutoa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-char *zltoa(char *buf, int32_t n, unsigned width, fmt_flags_t flags)
+char *zi32toa(char *buf, int32_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t n0, n1, n2, n3, n4, n5, n6, n7;
     uint8_t a8, a7, a6, a5, q; // yes, 8 bits are enough for these
@@ -518,7 +520,7 @@ char *zltoa(char *buf, int32_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-static char *zultoa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
+static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 {
     uint8_t n0, n1, n2, n3, n4, n5, n6, n7;
     uint8_t a8, a7, a6, a5, q; // yes, 8 bits are enough for these
@@ -654,15 +656,46 @@ static char *zultoa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
+#if UINT_MAX == UINT16_MAX
+#define zxtoa zx16toa
+#define zitoa zi16toa
+#define zutoa zu16toa
+#elif UINT_MAX == UINT32_MAX
+#define zxtoa zx32toa
+#define zitoa zi32toa
+#define zutoa zu32toa
+#elif UINT_MAX == UINT64_MAX
+#define zxtoa zx64toa
+#define zitoa zx64toa /* TODO: int64 decimal printing */
+#define zutoa zx64toa /* TODO: uint64 decimal printing */
+#else
+#error UINT_MAX unsupported
+#endif
+#if ULONG_MAX == UINT32_MAX
+#define zlxtoa zx32toa
+#define zltoa zi32toa
+#define zultoa zu32toa
+#elif ULONG_MAX == UINT64_MAX
+#define zlxtoa zx64toa
+#define zltoa zx64toa /* TODO: int64 decimal printing */
+#define zultoa zx64toa /* TODO: uint64 decimal printing */
+#else
+#error ULONG_MAX unsupported
+#endif
+#define zllxtoa zx64toa
+#define zlltoa zx64toa /* TODO: int64 decimal printing */
+#define zulltoa zx64toa /* TODO: uint64 decimal printing */
+
+
 // WARNING: saturates to INT32_MIN/INT32_MAX; fraction limited to 4 digits
 static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_flags_t flags)
 {
-    if (!zisfinitef(f)) {
-        if (zisnanf(f)) {
+    if (!isfinite(f)) {
+        if (isnanf(f)) {
             memcpy(buf, "NAN", sizeof("NAN"));
             buf += strlen(buf);
             return buf;
-        } else if (zisinff(f) == -1) {
+        } else if (isinff(f) == -1) {
             memcpy(buf, "-INF", sizeof("-INF"));
             buf += strlen(buf);
             return buf;
@@ -720,7 +753,7 @@ static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_
             whole = rounded;
         }
     }
-    if (!whole && zsignbitf(f)) {
+    if (!whole && signbit(f)) {
         *buf = '-';
         ++buf;
         flags.sign = auto_sign;
@@ -757,13 +790,13 @@ static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_
 // WARNING: saturates to INT32_MIN/INT32_MAX; fraction limited to 9 digits
 static char *zftoal(char *buf, long double f, unsigned width, unsigned precision, fmt_flags_t flags)
 {
-    if (!zisfinitel(f)) {
-        if (zisnanl(f)) {
+    if (!isfinite(f)) {
+        if (isnanl(f)) {
             memcpy(buf, "NAN", sizeof("NAN"));
             buf += strlen(buf);
             return buf;
         }
-        if (zisinfl(f) == -1) {
+        if (isinfl(f) == -1) {
             memcpy(buf, "-INF", sizeof("-INF"));
             buf += strlen(buf);
             return buf;
@@ -821,7 +854,7 @@ static char *zftoal(char *buf, long double f, unsigned width, unsigned precision
             whole = rounded;
         }
     }
-    if (!whole && zsignbitl(f)) {
+    if (!whole && signbit(f)) {
         *buf = '-';
         ++buf;
         flags.sign = auto_sign;
@@ -1000,7 +1033,7 @@ size_t zvsnprintf(char *buf, size_t n, const char *fmt, va_list ap)
                     || length == length_size_t) {
                     unsigned val = 0;
                     if (length == length_char) {
-                        val = va_arg(ap, char);
+                        val = va_arg(ap, int);
                     } else if (length == length_int) {
                         val = va_arg(ap, int);
                     } else if (length == length_size_t) {
@@ -1078,7 +1111,7 @@ size_t zvsnprintf(char *buf, size_t n, const char *fmt, va_list ap)
                 tok = tmp;
             } else if (*spec == 'p') {
                 void *val = va_arg(ap, void *);
-                zxtoa(tmp, (unsigned)val, width, flags); // presuming here that native arithmetic width is wide enough for a dat pointer
+                zxtoa(tmp, (unsigned long) /* TODO: whoa, this aint portable... hmmm  */val, width, flags); // presuming here that native arithmetic width is wide enough for a data pointer
                 tok = tmp;
             } else if (*spec == 's') {
                 tok = va_arg(ap, const char *);
@@ -1122,7 +1155,7 @@ size_t zvsnprintf(char *buf, size_t n, const char *fmt, va_list ap)
     return len;
 }
 
-size_t zsnprintf(__eds__ char *buf, size_t n, const char *fmt, ...)
+size_t zsnprintf(char *buf, size_t n, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
