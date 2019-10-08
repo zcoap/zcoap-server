@@ -160,8 +160,8 @@ typedef union ct_mask_s {
     coap_ct_t ct_literal;
 } ct_mask_t;
 
-extern void set_ct_mask(ct_mask_t *mask, ...);
-extern void set_ct_mask_literal(ct_mask_t *mask, coap_ct_t ct);
+extern void set_ct_mask(ct_mask_t * const mask, ...);
+extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
 
 /**
  * ZCOAP_METHOD_SIGNATURE
@@ -170,7 +170,7 @@ extern void set_ct_mask_literal(ct_mask_t *mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE const coap_node_t *node, coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], coap_ct_t ct, size_t len, void *payload, ct_mask_t *ctmask
+#define ZCOAP_METHOD_SIGNATURE const coap_node_t *node, coap_req_data_t *req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -201,22 +201,22 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
 /**
  * coap_discard_t
  *
- * Implementation CoAP message discard interface.
+ * zcoap-server message discard interface.
  *
  * Called by the ZCoAP CoAP server when processing of an incoming message is
  * complete, whether that be a completion with successfully generated response
- * or a silent discard of the message.
+ * or silently discarding the message.
  *
  * Typical usage is to free dynamically-allocated message data.
  *
  * @param req incoming CoAP message with request-centric implementation metadata
  */
-typedef void __attribute__((nonnull (1))) (*coap_discard_t)(coap_req_data_t *req);
+typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data_t * const req);
 
 /**
  * coap_acker_t
  *
- * Implementation confirmable CoAP message ACK dispatch interface.
+ * zcoap-server confirmable message ACK dispatch interface.
  *
  * Request handler methods may call coap_ack for stand-alone immediate ACK when
  * non-piggy-packed response behavior is preferred over the ZCoAP CoAP server's
@@ -231,10 +231,29 @@ typedef void __attribute__((nonnull (1))) (*coap_discard_t)(coap_req_data_t *req
  * messages to type NON-CONFIRMABLE.  This will prevent duplicate ACK when
  * requests are eventually passed to coap_rsp.
  *
- * @param req incoming CoAP request with implementation-specific metadata
+ * @param req initiating CoAP request with implementation-specific metadata
+ * @param ack buffer containing a fully-formed ACK for injection into the implementation-specific transport layer; note that ACK is by definition sizeof(coap_msg_t)
  */
-typedef void __attribute__((nonnull (1))) (*coap_acker_t)(coap_req_data_t *req, coap_msg_t *ack);
-typedef void __attribute__((nonnull (1))) (*coap_responder_t)(coap_req_data_t *req, size_t len, coap_msg_t *rsp);
+typedef void __attribute__((nonnull (1))) (* const coap_acker_t)(coap_req_data_t * const req, const coap_msg_t *ack);
+
+/**
+ * coap_responder_t
+ *
+ * zcoap-server request responder interface.
+ *
+ * Called at the conclusion of server processing to transmit a response to the
+ * initiating client request by injection into the implementation-specific
+ * transport layer.  Confirmable messages for which stand-alone ACK has not
+ * been issued will be emitted as piggy-backed responses.
+ *
+ * Server executes ->discard() immediately after call to the implemented
+ * responder.
+ *
+ * @param req incoming CoAP request with implementation-specific metadata
+ * @param len length of the CoAP response message to be injected into the implementation-specific transport layer
+ * @param rsp buffer containing a fully-formed response for injection into the implementation-specific transport layer
+ */
+typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp);
 
 /**
  */
@@ -250,7 +269,8 @@ struct coap_req_data_s {
      * contains the information necessary to route a CoAP response back to the
      * requesting agent.
      */
-    void *header;
+    void * const header;
+
     /**
      * context
      *
@@ -260,20 +280,24 @@ struct coap_req_data_s {
      * tuple.  In such an environment, the responder may simply write the
      * response to the file descriptor.
      */
-    int context;
+
+    const int context;
+
     /**
      * msg
      *
      * Pointer to a message incoming to the server.  Presumably this will be a
      * request.
      */
-    coap_msg_t *msg;
+    coap_msg_t * const msg;
+
     /**
      * len
      *
      * Length of the incoming message.
      */
-    size_t len;
+    const size_t len;
+
     /*
      * discard
      *
@@ -289,6 +313,7 @@ struct coap_req_data_s {
      * may be left NULL.
      */
     coap_discard_t discard;
+
     /*
      * acker
      *
@@ -304,6 +329,7 @@ struct coap_req_data_s {
      * not needed.
      */
     coap_acker_t acker;
+
     /**
      * Implementation-specific responder function.  For issuing both
      * piggy-backed and non-piggy-backed responses.  An implicit contract
@@ -378,28 +404,28 @@ typedef uint8_t zcoap_bool_t;
 #define ZCOAP_FALSE_STR "false"
 #define TO_ZCOAP_BOOL(_b) ((_b) ? ZCOAP_TRUE : ZCOAP_FALSE)
 
-extern coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], coap_ct_t *ct);
-extern coap_code_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], bool *found, uint32_t *size1);
-extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], size_t *nqueryopts);
-extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t queryopts[]);
-extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, void **payload);
+extern coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t * const ct);
+extern coap_code_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], bool * const found, uint32_t * const size1);
+extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], size_t * const nqueryopts);
+extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t * const queryopts);
+extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t * const req, size_t * const len, const void **payload);
 
-extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req);
-extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
-extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
-extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
-extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
+extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req);
+extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const const coap_opt_t opts[], const size_t pl_len, const void * const payload);
+extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t * const req, const coap_code_t code, const coap_ct_t ct, const size_t pl_len, const void * const payload);
+extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t * const req, const coap_code_t code);
+extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t * const req, const coap_code_t code, const char * const detail);
 
-extern void coap_printf(coap_req_data_t *req, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
-extern void coap_return_bool(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], bool val);
-extern void coap_return_u16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, uint16_t val);
-extern void coap_return_u32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, uint32_t val);
-extern void coap_return_u64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, uint64_t val);
-extern void coap_return_i16(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, int16_t val);
-extern void coap_return_i32(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, int32_t val);
-extern void coap_return_i64(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, int64_t val);
-extern void coap_return_float(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, float val);
-extern void coap_return_double(coap_req_data_t *req, size_t nopts, coap_msg_opt_t opts[], const char *fmt, ZCOAP_DOUBLE val);
+extern void coap_printf(coap_req_data_t *req, const char * const fmt, ...) __attribute__((format (printf, 2, 3)));
+extern void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const bool val);
+extern void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const uint16_t val);
+extern void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const uint32_t val);
+extern void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const uint64_t val);
+extern void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const int16_t val);
+extern void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const int32_t val);
+extern void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const int64_t val);
+extern void coap_return_float(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const float val);
+extern void coap_return_double(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, const ZCOAP_DOUBLE val);
 
 extern void coap_get_bool(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_u16(ZCOAP_METHOD_SIGNATURE);
@@ -411,25 +437,25 @@ extern void coap_get_i64(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_double(ZCOAP_METHOD_SIGNATURE);
 
-extern int coap_parse_bool(void *ascii, size_t len, bool *out);
-extern int coap_parse_uint(void *ascii, size_t len, unsigned *out);
-extern int coap_parse_ulong(void *ascii, size_t len, unsigned long *out);
-extern int coap_parse_ullong(void *ascii, size_t len, unsigned long long *out);
-extern int coap_parse_int(void *ascii, size_t len, int *out);
-extern int coap_parse_long(void *ascii, size_t len, long *out);
-extern int coap_parse_llong(void *ascii, size_t len, long long *out);
-extern int coap_parse_float(void *ascii, size_t len, float *out);
-extern int coap_parse_double(void *ascii, size_t len, ZCOAP_DOUBLE *out);
+extern int coap_parse_bool(const void * const ascii, const size_t len, bool * const out);
+extern int coap_parse_uint(const void * const ascii, const size_t len, unsigned * const out);
+extern int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out);
+extern int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long long * const out);
+extern int coap_parse_int(const void * const ascii, const size_t len, int * const out);
+extern int coap_parse_long(const void * const ascii, const size_t len, long * const out);
+extern int coap_parse_llong(const void * const ascii, const size_t len, long long * const out);
+extern int coap_parse_float(const void * const ascii, const size_t len, float * const out);
+extern int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE * const out);
 
-extern coap_code_t coap_parse_req_bool(coap_ct_t ct, size_t len, void *payload, bool *out);
-extern coap_code_t coap_parse_req_u16(coap_ct_t ct, size_t len, void *payload, uint16_t *out);
-extern coap_code_t coap_parse_req_u32(coap_ct_t ct, size_t len, void *payload, uint32_t *out);
-extern coap_code_t coap_parse_req_u64(coap_ct_t ct, size_t len, void *payload, uint64_t *out);
-extern coap_code_t coap_parse_req_i16(coap_ct_t ct, size_t len, void *payload, int16_t *out);
-extern coap_code_t coap_parse_req_i32(coap_ct_t ct, size_t len, void *payload, int32_t *out);
-extern coap_code_t coap_parse_req_i64(coap_ct_t ct, size_t len, void *payload, int64_t *out);
-extern coap_code_t coap_parse_req_float(coap_ct_t ct, size_t len, void *payload, float *out);
-extern coap_code_t coap_parse_req_double(coap_ct_t ct, size_t len, void *payload, ZCOAP_DOUBLE *out);
+extern coap_code_t coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void * const payload, bool * const out);
+extern coap_code_t coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void * const payload, uint16_t * const out);
+extern coap_code_t coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void * const payload, uint32_t * const out);
+extern coap_code_t coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payload, uint64_t * const out);
+extern coap_code_t coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void * const payload, int16_t * const out);
+extern coap_code_t coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void * const payload, int32_t * const out);
+extern coap_code_t coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payload, int64_t * const out);
+extern coap_code_t coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const payload, float * const out);
+extern coap_code_t coap_parse_req_double(const coap_ct_t ct, const size_t len, const void * const payload, ZCOAP_DOUBLE * const out);
 
 extern void coap_put_bool(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_u16(ZCOAP_METHOD_SIGNATURE);
@@ -473,7 +499,7 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #endif
 
 extern void coap_init(coap_node_t *root); // <- init must be called against any URI trees before it is passed to the server!
-extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, coap_node_t *root); // <- server entry point!
+extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t * const req, const coap_node_t * const root); // <- server entry point!
 
 extern const coap_node_t wellknown_uri;
 
