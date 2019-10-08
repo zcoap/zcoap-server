@@ -719,7 +719,7 @@ static size_t opt_sec_len(size_t nopts, const coap_opt_t opts[])
  *
  * @param req CoAP request to discard
  */
-static void __attribute__((nonnull (1))) coap_discard(coap_req_data_t *req)
+static void __attribute__((nonnull (1))) coap_discard(coap_req_data_t * const req)
 {
     if (req == NULL) {
         return;
@@ -739,7 +739,7 @@ static void __attribute__((nonnull (1))) coap_discard(coap_req_data_t *req)
  * @param req CoAP request to ACK
  * @return 0 on success, non-zero on error
  */
-void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req)
+void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req)
 {
     if (   req == NULL
         || req->msg == NULL
@@ -759,9 +759,9 @@ void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req)
     ack.code.code_class = 0;
     ack.code.code_detail = 0;
     ((*req->acker)(req, &ack));
-    // On ACK dispatch, hijack req->type and change to NON.  This will illicit
-    // non-piggy-backed response behavior in coap_rsp().
-    req->msg->type = COAP_TYPE_NON_CONFIRMABLE;
+    // Note transmission of ACK to illicit non-piggy-backed
+    // response behavior in coap_rsp().
+    req->state.acked = true;
 }
 
 /**
@@ -802,7 +802,7 @@ void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, const co
     }
     // Copy message header and token.
     ZCOAP_MEMCPY(rsp, req->msg, sizeof(coap_msg_t) + req->msg->tkl);
-    if (req->msg->type == COAP_TYPE_CONFIRMABLE) {
+    if (req->msg->type == COAP_TYPE_CONFIRMABLE && !req->state.acked) {
         rsp->type = COAP_TYPE_ACK;
     } else {
         rsp->type = COAP_TYPE_NON_CONFIRMABLE;
@@ -1508,6 +1508,8 @@ void coap_rx(coap_req_data_t * const req, const coap_node_t * const root)
             coap_discard(req);
             return;
     }
+    // Clear our ACK-transmission flag.
+    ZCOAP_MEMSET(&req->state, 0, sizeof(req->state));
     // This is a valid request!  Inject into the server!
     inject_coap_req(req, root);
 }

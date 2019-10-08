@@ -170,7 +170,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE const coap_node_t *node, coap_req_data_t *req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
+#define ZCOAP_METHOD_SIGNATURE const coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -280,7 +280,6 @@ struct coap_req_data_s {
      * tuple.  In such an environment, the responder may simply write the
      * response to the file descriptor.
      */
-
     const int context;
 
     /**
@@ -289,7 +288,7 @@ struct coap_req_data_s {
      * Pointer to a message incoming to the server.  Presumably this will be a
      * request.
      */
-    coap_msg_t * const msg;
+    const coap_msg_t * const msg;
 
     /**
      * len
@@ -338,6 +337,18 @@ struct coap_req_data_s {
      * is called.
      */
     coap_responder_t responder;
+
+    /**
+     * Used by the server internally to maintain state.  Cleared on injection
+     * of the request into the server.
+     */
+    struct {
+        /**
+         * Set on transmission of non-piggy-backed, stand-alone ACK to suppress
+         * duplicate ACK from coap_rsp.
+         */
+        bool acked;
+    } state;
 };
 
 typedef struct coap_opt_s {
