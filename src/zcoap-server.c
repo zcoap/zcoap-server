@@ -1973,8 +1973,15 @@ int coap_parse_llong(void *ascii, size_t len, long long *out)
 #endif
 
 #if ULONG_MAX == UINT64_MAX
-#define coap_parse_ulong coap_parse_ullong
-#define coap_parse_long coap_parse_llong
+int coap_parse_ulong(void *ascii, size_t len, unsigned long *out)
+{
+    return coap_parse_ullong(ascii, len, (unsigned long long *)out); // we checked width; this is OK
+}
+
+int coap_parse_long(void *ascii, size_t len, long *out)
+{
+    return coap_parse_llong(ascii, len, (long long *)out); // we checked width; this is OK
+}
 #elif ULONG_MAX == UINT32_MAX
 /**
  * Interpret the passed buffer as an ascii representation of an unsigned long
