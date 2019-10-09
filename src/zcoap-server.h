@@ -107,16 +107,16 @@ typedef enum coap_content_format_e {
     COAP_FMT_EXI = 47,
     COAP_FMT_JSON = 50,
     #ifdef ZCOAP_EXTENSIONS
-    ZFMT_AUTO = 72,
-    ZFMT_BOOL,
-    ZFMT_U16,
-    ZFMT_U32,
-    ZFMT_U64,
-    ZFMT_I16,
-    ZFMT_I32,
-    ZFMT_I64,
-    ZFMT_FLOAT,
-    ZFMT_DOUBLE,
+    ZCOAP_FMT_AUTO = 72,
+    ZCOAP_FMT_BOOL,
+    ZCOAP_FMT_U16,
+    ZCOAP_FMT_U32,
+    ZCOAP_FMT_U64,
+    ZCOAP_FMT_I16,
+    ZCOAP_FMT_I32,
+    ZCOAP_FMT_I64,
+    ZCOAP_FMT_FLOAT,
+    ZCOAP_FMT_DOUBLE,
     #endif /* ZCOAP_EXTENSIONS */
     // Per RFC7252, identifiers between 65000 and 65535 are reserved
     // for experiments and forbidden for inclusion on the wire as CoAP
@@ -129,7 +129,7 @@ typedef enum coap_content_format_e {
     // Content Format options.  Thus, it is safe for us to use 65535
     // internally to deliniate the end of a variadiac array of options
     // as passed to set_ct_mask.
-    ZCOAP_FMT_SENTINEL = 0xffff
+    ZCOAP_FMT_SENTINEL = 0xffff,
 } coap_content_format_t;
 
 typedef uint16_t coap_ct_t;

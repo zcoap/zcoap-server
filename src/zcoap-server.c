@@ -25,39 +25,39 @@
 #define COAP_OPTS(_coap_msg) ((uint8_t *)((coap_msg_t *)(_coap_msg) + 1) + (_coap_msg)->tkl)
 #define HREF_KEY "href=/"
 
-#define ZCOAP_FMT_UINT "%u"
-#define ZCOAP_FMT_INT "%d"
-#define ZCOAP_FMT_ULONG "%lu"
-#define ZCOAP_FMT_LONG "%ld"
-#define ZCOAP_FMT_ULLONG "0x%llX" /* 64-biit decimal printing can be truncated by znsprintf; hex printing works though */
-#define ZCOAP_FMT_LLONG ZCOAP_FMT_ULLONG
-#define ZCOAP_FMT_FLOAT "%.8g"
+#define RESPONSE_FMT_UINT "%u"
+#define RESPONSE_FMT_INT "%d"
+#define RESPONSE_FMT_ULONG "%lu"
+#define RESPONSE_FMT_LONG "%ld"
+#define RESPONSE_FMT_ULLONG "0x%llX" /* 64-biit decimal printing can be truncated by znsprintf; hex printing works though */
+#define RESPONSE_FMT_LLONG RESPONSE_FMT_ULLONG
+#define RESPONSE_FMT_FLOAT "%.8g"
 #if (__DBL_MANT_DIG__ != 53 && __LDBL_MANT_DIG__ == 53)
-#define ZCOAP_FMT_DOUBLE "%.8Lg"
+#define RESPONSE_FMT_DOUBLE "%.8Lg"
 #define ZCOAP_DOUBLE long double
 #elif (__DBL_MANT_DIG__ != 53)
 #error unable find a native 64-bit type for the zcoap double!
 #else
-#define ZCOAP_FMT_DOUBLE "%.8g"
+#define RESPONSE_FMT_DOUBLE "%.8g"
 #endif
 
-#define ZCOAP_FMT_U16 ZCOAP_FMT_UINT
-#define ZCOAP_FMT_I16 ZCOAP_FMT_INT
+#define RESPONSE_FMT_U16 RESPONSE_FMT_UINT
+#define RESPONSE_FMT_I16 RESPONSE_FMT_INT
 #if UINT32_MAX == UINT_MAX
-#define ZCOAP_FMT_U32 ZCOAP_FMT_UINT
-#define ZCOAP_FMT_I32 ZCOAP_FMT_INT
+#define RESPONSE_FMT_U32 RESPONSE_FMT_UINT
+#define RESPONSE_FMT_I32 RESPONSE_FMT_INT
 #elif UINT32_MAX == ULONG_MAX
-#define ZCOAP_FMT_U32 ZCOAP_FMT_ULONG
-#define ZCOAP_FMT_I32 ZCOAP_FMT_LONG
+#define RESPONSE_FMT_U32 RESPONSE_FMT_ULONG
+#define RESPONSE_FMT_I32 RESPONSE_FMT_LONG
 #else
 #error cannot determine appropriate format specifiers for 32-bit integers!
 #endif
 #if UINT64_MAX == ULONG_MAX
-#define ZCOAP_FMT_U64 ZCOAP_FMT_ULONG
-#define ZCOAP_FMT_I64 ZCOAP_FMT_LONG
+#define RESPONSE_FMT_U64 RESPONSE_FMT_ULONG
+#define RESPONSE_FMT_I64 RESPONSE_FMT_LONG
 #elif UINT64_MAX == ULLONG_MAX
-#define ZCOAP_FMT_U64 ZCOAP_FMT_ULLONG
-#define ZCOAP_FMT_I64 ZCOAP_FMT_LLONG
+#define RESPONSE_FMT_U64 RESPONSE_FMT_ULLONG
+#define RESPONSE_FMT_I64 RESPONSE_FMT_LLONG
 #else
 #error cannot determine appropriate format specifiers for 64-bit integers!
 #endif
@@ -290,31 +290,31 @@ static void print_ct(const coap_node_t * const node, size_t *len, char **buf, si
     }
     #ifdef ZCOAP_EXTENSIONS
     if (mask.ct_bool) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_BOOL);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_BOOL);
     }
     if (mask.ct_u16) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_U16);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_U16);
     }
     if (mask.ct_u32) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_U32);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_U32);
     }
     if (mask.ct_u64) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_U64);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_U64);
     }
     if (mask.ct_i16) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_I16);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_I16);
     }
     if (mask.ct_i32) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_I32);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_I32);
     }
     if (mask.ct_i64) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_I64);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_I64);
     }
     if (mask.ct_float) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_FLOAT);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_FLOAT);
     }
     if (mask.ct_double) {
-        SNPRINTF(len, buf, remain, ";ct=%u", ZEPTO_FMT_DOUBLE);
+        SNPRINTF(len, buf, remain, ";ct=%u", ZCOAP_FMT_DOUBLE);
     }
     #endif /* ZCOAP_EXTENSIONS */
 }
@@ -1125,16 +1125,16 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_
         case COAP_FMT_EXI:
         case COAP_FMT_JSON:
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_BOOL:
-        case ZEPTO_FMT_U16:
-        case ZEPTO_FMT_I16:
-        case ZEPTO_FMT_U32:
-        case ZEPTO_FMT_I32:
-        case ZEPTO_FMT_U64:
-        case ZEPTO_FMT_I64:
-        case ZEPTO_FMT_FLOAT:
-        case ZEPTO_FMT_DOUBLE:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_BOOL:
+        case ZCOAP_FMT_U16:
+        case ZCOAP_FMT_I16:
+        case ZCOAP_FMT_U32:
+        case ZCOAP_FMT_I32:
+        case ZCOAP_FMT_U64:
+        case ZCOAP_FMT_I64:
+        case ZCOAP_FMT_FLOAT:
+        case ZCOAP_FMT_DOUBLE:
         #endif /* ZCOAP_EXTENSIONS */
             break;
         default:
@@ -2406,7 +2406,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2416,7 +2416,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2426,7 +2426,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2436,7 +2436,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2449,7 +2449,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2462,7 +2462,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2475,7 +2475,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2491,7 +2491,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
             }
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2550,7 +2550,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2560,7 +2560,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2570,7 +2570,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2583,7 +2583,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2593,7 +2593,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2603,7 +2603,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2613,7 +2613,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2629,7 +2629,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
             }
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2688,7 +2688,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2698,7 +2698,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2708,7 +2708,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2721,7 +2721,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2734,7 +2734,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2747,7 +2747,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2760,7 +2760,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2776,7 +2776,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
             }
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2836,7 +2836,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2846,7 +2846,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2859,7 +2859,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2872,7 +2872,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2882,7 +2882,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2892,7 +2892,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2905,7 +2905,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2921,7 +2921,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
             }
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2981,7 +2981,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2991,7 +2991,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3001,7 +3001,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3011,7 +3011,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3021,7 +3021,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3031,7 +3031,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3041,7 +3041,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3050,7 +3050,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
             *out = ZCOAP_NTOHF(pval);
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3102,7 +3102,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_U16: {
+        case ZCOAP_FMT_U16: {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3112,7 +3112,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U32: {
+        case ZCOAP_FMT_U32: {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3122,7 +3122,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_U64: {
+        case ZCOAP_FMT_U64: {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3132,7 +3132,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_I16: {
             int16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3142,7 +3142,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3152,7 +3152,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3162,7 +3162,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = pval;
             return 0;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3171,7 +3171,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
             *out = ZCOAP_NTOHF(pval);
             return 0;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3271,7 +3271,7 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_bool(const coap_ct_t c
     }
     switch (ct) {
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_BOOL: {
+        case ZCOAP_FMT_BOOL: {
             zcoap_bool_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3366,40 +3366,40 @@ void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coa
             coap_printf(req, val ? ZCOAP_TRUE_STR : ZCOAP_FALSE_STR);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_BOOL: {
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_BOOL: {
             zcoap_bool_t _val = TO_ZCOAP_BOOL(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_BOOL, sizeof(_val), &_val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_BOOL, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_U16:
-        case ZEPTO_FMT_I16: {
+        case ZCOAP_FMT_U16:
+        case ZCOAP_FMT_I16: {
             int16_t _val = TO_ZCOAP_BOOL(val);
             _val = ZCOAP_HTONS(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_U32:
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_U32:
+        case ZCOAP_FMT_I32: {
             int32_t _val = TO_ZCOAP_BOOL(val);
             _val = ZCOAP_HTONL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_U64:
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_U64:
+        case ZCOAP_FMT_I64: {
             int64_t _val = TO_ZCOAP_BOOL(val);
             _val = ZCOAP_HTONLL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float _val = TO_ZCOAP_BOOL(val);
             _val = ZCOAP_HTONF(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = TO_ZCOAP_BOOL(val);
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3439,35 +3439,35 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_U16, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_U16, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_U16:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_U16:
             val = ZCOAP_HTONS(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_U16, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_U16, sizeof(val), &val);
             break;
-        case ZEPTO_FMT_U32:
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_U32:
+        case ZCOAP_FMT_I32: {
             int32_t _val = val;
             _val = ZCOAP_HTONL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_U64:
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_U64:
+        case ZCOAP_FMT_I64: {
             int64_t _val = val;
             _val = ZCOAP_HTONLL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float _val = val;
             _val = ZCOAP_HTONF(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = val;
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3507,22 +3507,22 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_U32, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_U32, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_U32:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_U32:
             val = ZCOAP_HTONL(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_U32, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_U32, sizeof(val), &val);
             break;
-        case ZEPTO_FMT_U64:
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_U64:
+        case ZCOAP_FMT_I64: {
             int64_t _val = val;
             _val = ZCOAP_HTONLL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = val;
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3562,13 +3562,13 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_U64, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_U64, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_U64:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_U64:
             val = ZCOAP_HTONLL(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_U64, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_U64, sizeof(val), &val);
             break;
         #endif /* ZCOAP_EXTENSIONS */
         default:
@@ -3604,32 +3604,32 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_I16, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_I16, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_I16:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_I16:
             val = ZCOAP_HTONS(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_I16, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_I16, sizeof(val), &val);
             break;
-        case ZEPTO_FMT_I32: {
+        case ZCOAP_FMT_I32: {
             int32_t _val = val;
             _val = ZCOAP_HTONL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t _val = val;
             _val = ZCOAP_HTONLL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_FLOAT: {
+        case ZCOAP_FMT_FLOAT: {
             float _val = val;
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = val;
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3669,21 +3669,21 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_I32, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_I32, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_I32:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_I32:
             val = ZCOAP_HTONL(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_I32, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_I32, sizeof(val), &val);
             break;
-        case ZEPTO_FMT_I64: {
+        case ZCOAP_FMT_I64: {
             int64_t _val = val;
             _val = ZCOAP_HTONLL(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
             break;
         }
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = val;
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3723,13 +3723,13 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_I64, val);
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_I64, val);
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_I64:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_I64:
             val = ZCOAP_HTONLL(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_I64, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_I64, sizeof(val), &val);
             break;
         #endif /* ZCOAP_EXTENSIONS */
         default:
@@ -3765,15 +3765,15 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_FLOAT, (double)val); // %f means double - period, and whatever that is; do *not* use ZCOAP_DOUBLE macro here
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_FLOAT, (double)val); // %f means double - period, and whatever that is; do *not* use ZCOAP_DOUBLE macro here
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_FLOAT:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_FLOAT:
             val = ZCOAP_HTONF(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_FLOAT, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_FLOAT, sizeof(val), &val);
             break;
-        case ZEPTO_FMT_DOUBLE: {
+        case ZCOAP_FMT_DOUBLE: {
             ZCOAP_DOUBLE _val = val;
             _val = ZCOAP_HTOND(_val);
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ct, sizeof(_val), &_val);
@@ -3813,13 +3813,13 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
-            coap_printf(req, fmt ? fmt : ZCOAP_FMT_DOUBLE, (double)val); // %f means double - period, and whatever that is; do *not* use ZCOAP_DOUBLE macro here
+            coap_printf(req, fmt ? fmt : RESPONSE_FMT_DOUBLE, (double)val); // %f means double - period, and whatever that is; do *not* use ZCOAP_DOUBLE macro here
             break;
         #ifdef ZCOAP_EXTENSIONS
-        case ZEPTO_FMT_AUTO:
-        case ZEPTO_FMT_DOUBLE:
+        case ZCOAP_FMT_AUTO:
+        case ZCOAP_FMT_DOUBLE:
             val = ZCOAP_HTOND(val);
-            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZEPTO_FMT_DOUBLE, sizeof(val), &val);
+            coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), ZCOAP_FMT_DOUBLE, sizeof(val), &val);
             break;
         #endif /* ZCOAP_EXTENSIONS */
         default:
@@ -3842,8 +3842,8 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
 void coap_get_bool( ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
-    #ifdef ZEPTO_COAP_EXCEPTIONS
-    ZEPTO_FMT_BOOL,
+    #ifdef ZCOAP_EXTENSIONS
+    ZCOAP_FMT_BOOL,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3872,8 +3872,8 @@ void coap_get_bool( ZCOAP_METHOD_SIGNATURE)
 void coap_get_u16(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
-    #ifdef ZEPTO_COAP_EXCEPTIONS
-    ZEPTO_FMT_U16,
+    #ifdef ZCOAP_EXTENSIONS
+    ZCOAP_FMT_U16,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3903,7 +3903,7 @@ void coap_get_u32(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_U32,
+    ZCOAP_FMT_U32,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3933,7 +3933,7 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_U64,
+    ZCOAP_FMT_U64,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3962,8 +3962,8 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
 void coap_get_i16(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
-    #ifdef ZEPTO_COAP_EXCEPTIONS
-    ZEPTO_FMT_I16,
+    #ifdef ZCOAP_EXTENSIONS
+    ZCOAP_FMT_I16,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -3993,7 +3993,7 @@ void coap_get_i32(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_I32,
+    ZCOAP_FMT_I32,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -4023,7 +4023,7 @@ void coap_get_i64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_I64,
+    ZCOAP_FMT_I64,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -4053,7 +4053,7 @@ void coap_get_float(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_FLOAT,
+    ZCOAP_FMT_FLOAT,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -4084,7 +4084,7 @@ void coap_get_double(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_DOUBLE,
+    ZCOAP_FMT_DOUBLE,
     #endif
     ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -4114,7 +4114,7 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_BOOL,
+    ZCOAP_FMT_BOOL,
     #endif
     ZCOAP_FMT_SENTINEL);
     bool val;
@@ -4153,7 +4153,7 @@ void coap_put_u16(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_U16,
+    ZCOAP_FMT_U16,
     #endif
     ZCOAP_FMT_SENTINEL);
     uint16_t val;
@@ -4194,7 +4194,7 @@ void coap_put_u32(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_U32,
+    ZCOAP_FMT_U32,
     #endif
     ZCOAP_FMT_SENTINEL);
     uint32_t val;
@@ -4233,7 +4233,7 @@ void coap_put_u64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_U64,
+    ZCOAP_FMT_U64,
     #endif
     ZCOAP_FMT_SENTINEL);
     uint64_t val;
@@ -4274,7 +4274,7 @@ void coap_put_i16(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_I16,
+    ZCOAP_FMT_I16,
     #endif
     ZCOAP_FMT_SENTINEL);
     int16_t val;
@@ -4313,7 +4313,7 @@ void coap_put_i32(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_I32,
+    ZCOAP_FMT_I32,
     #endif
     ZCOAP_FMT_SENTINEL);
     int32_t val;
@@ -4352,7 +4352,7 @@ void coap_put_i64(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_I64,
+    ZCOAP_FMT_I64,
     #endif
     ZCOAP_FMT_SENTINEL);
     int64_t val;
@@ -4390,7 +4390,7 @@ void coap_put_float(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_FLOAT,
+    ZCOAP_FMT_FLOAT,
     #endif
     ZCOAP_FMT_SENTINEL);
     float val;
@@ -4428,7 +4428,7 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT,
     #ifdef ZCOAP_EXTENSIONS
-    ZEPTO_FMT_DOUBLE,
+    ZCOAP_FMT_DOUBLE,
     #endif
     ZCOAP_FMT_SENTINEL);
     ZCOAP_DOUBLE val;
@@ -4482,31 +4482,31 @@ void set_ct_mask(ct_mask_t *mask, ...)
                 mask->ct_json = 1;
                 break;
             #ifdef ZCOAP_EXTENSIONS
-            case ZEPTO_FMT_BOOL:
+            case ZCOAP_FMT_BOOL:
                 mask->ct_bool = 1;
                 break;
-            case ZEPTO_FMT_U16:
+            case ZCOAP_FMT_U16:
                 mask->ct_u16 = 1;
                 break;
-            case ZEPTO_FMT_U32:
+            case ZCOAP_FMT_U32:
                 mask->ct_u32 = 1;
                 break;
-            case ZEPTO_FMT_U64:
+            case ZCOAP_FMT_U64:
                 mask->ct_u64 = 1;
                 break;
-            case ZEPTO_FMT_I16:
+            case ZCOAP_FMT_I16:
                 mask->ct_i16 = 1;
                 break;
-            case ZEPTO_FMT_I32:
+            case ZCOAP_FMT_I32:
                 mask->ct_i32 = 1;
                 break;
-            case ZEPTO_FMT_I64:
+            case ZCOAP_FMT_I64:
                 mask->ct_i64 = 1;
                 break;
-            case ZEPTO_FMT_FLOAT:
+            case ZCOAP_FMT_FLOAT:
                 mask->ct_float = 1;
                 break;
-            case ZEPTO_FMT_DOUBLE:
+            case ZCOAP_FMT_DOUBLE:
                 mask->ct_double = 1;
                 break;
             #endif /* ZCOAP_EXTENSIONS */
