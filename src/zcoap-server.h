@@ -398,6 +398,7 @@ extern void coap_return_i64(coap_req_data_t *req, size_t nopts, const coap_msg_o
 extern void coap_return_float(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, float val);
 extern void coap_return_double(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, ZCOAP_DOUBLE val);
 
+extern void coap_get_string(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_bool(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_u16(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_u32(ZCOAP_METHOD_SIGNATURE);

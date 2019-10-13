@@ -3829,6 +3829,33 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
 }
 
 /**
+ * Utility GET handler for null-terminated C strings.
+ *
+ * If node->data is non-null, retrieve the value from this location.  Else
+ * return an internal server error response.
+ *
+ * @param req originating CoAP request
+ * @param nopts number of enclosed options
+ * @param opts request options array
+ * @param node server URI tree node
+ */
+void coap_get_string( ZCOAP_METHOD_SIGNATURE)
+{
+    ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_SENTINEL);
+    if (!node->data) {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+    } else {
+        ZCOAP_LOCK();
+        const char *str = (const char *)node->data;
+        size_t len = strlen(str);
+        char buf[len + 1];
+        memcpy(buf, str, len + 1);
+        ZCOAP_UNLOCK();
+        coap_printf(req, "%s", buf);
+    }
+}
+
+/**
  * Utility GET handler for booleans.
  *
  * If node->data is non-null, retrieve the value from this location.  Else
