@@ -32,7 +32,7 @@ static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
     ZCOAP_METHOD_HEADER(
          COAP_FMT_TEXT,
          #ifdef ZCOAP_EXTENSIONS
-         ZCOAP_FMT_I32,
+         ZCOAP_FMT_INT,
          #endif
          ZCOAP_FMT_SENTINEL);
     srand(0);
