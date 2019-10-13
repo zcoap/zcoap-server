@@ -22,61 +22,40 @@ void error(char *msg)
 
 int main(int argc, char *argv[])
 {
-    int sockfd, newsockfd, clilen;
-    int portno = DEFAULT_PORT;
-
-    char buffer[1024];
-
-    struct sockaddr_in serv_addr, cli_addr;
-
-    int n;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    const int portno = DEFAULT_PORT;
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
        error("ERROR opening socket");
     }
 
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(portno);
-
-    if (bind(sockfd, (struct sockaddr *) &serv_addr,
+    struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(portno),
+                                     .sin_addr = { .s_addr = INADDR_ANY } };
+    if (bind(sockfd, (const struct sockaddr *)&serv_addr,
              sizeof(serv_addr)) < 0)
     {
         error("ERROR on binding");
     }
 
-    listen(sockfd, 5);
-
-    clilen = sizeof(cli_addr);
-
-    printf("Listening on port %d\n", (int)DEFAULT_PORT);
-
-    newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-
-    if (newsockfd < 0)
+    while (1)
     {
-         error("ERROR on accept");
+        ssize_t pending = recv(sockfd, NULL, 0, MSG_PEEK | MSG_TRUNC);
+        if (pending < 0)
+        {
+            error("ERROR reading from socket");
+        }
+        uint8_t buf[pending];
+        struct sockaddr_in cli_addr =  { 0 };
+        socklen_t clilen = sizeof(cli_addr);
+        ssize_t received = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &clilen);
+        if (received != pending)
+        {
+            error("ERROR reading from socket - pending and received counts do not match");
+        }
+        if (clilen > sizeof(cli_addr))
+        {
+            error("recvfrom error - client source address information is truncated");
+        }
     }
-
-    bzero(buffer, 256);
-
-    n = read(newsockfd, buffer, 255);
-
-    if (n < 0) error("ERROR reading from socket");
-    {
-        printf("Received bytes: %s\n", buffer);
-    }
-
-    n = write(newsockfd, "I got your bytes!", 18);
-
-    if (n < 0)
-    {
-        error("ERROR writing to socket");
-    }
-
     return 0;
 }
