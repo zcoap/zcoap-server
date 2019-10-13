@@ -320,7 +320,24 @@ static void print_ct(const coap_node_t * const node, size_t *len, char **buf, si
 }
 
 /**
- * Recurse URI tree iterator for performing a depth-first walk of the URI tree
+ * Free children and all of their allocated name fields.  These will have been
+ * allocated by generator functions with ZCOAP_REALLOC.
+ */
+static void free_dynamic_children(size_t n, coap_node_t *children)
+{
+    if (!children) {
+        return;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (children->dname) {
+            ZCOAP_FREE(children->dname);
+        }
+    }
+    ZCOAP_FREE(children);
+}
+
+/**
+ * Recursive URI tree iterator for performing a depth-first walk of the URI tree
  * and dumping an RFC6690-compliant .well-known/core response.
  *
  * @param pwd present working directory; the path preceding node
@@ -351,30 +368,29 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
             SNPRINTF(len, buf, remain, ",");
         }
     }
-    if (node->gens) {
-        for (const coap_gen_t *g = node->gens; *g != NULL; ++g) {
-            coap_meta_t iterator = 0;
-            while (1) {
-                coap_node_t dynamic_node = { .parent = node };
-                if ((**g)(&iterator, &dynamic_node)) {
-                    break;
+    if (node->gen) {
+        coap_node_t *children = NULL;
+        size_t n = 0;
+        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
+        for (size_t i = 0; i < n && !code && children; ++i) {
+            // Populate parent pointers so the generator doesn't have to.
+            children[i].parent = node;
+            if (children[i].name == NULL) {
+                continue; // suppress output of unnamed elements
+            } else if (href_filter->str) {
+                if (!parent_href_match && !href_match(children[i].name, href_filter)) {
+                    continue;
                 }
-                if (dynamic_node.name == NULL) {
-                    continue; // suppress output of unnamed elements
-                } else if (href_filter->str) {
-                    if (!parent_href_match && !href_match(dynamic_node.name, href_filter)) {
-                        continue;
-                    }
-                } else if (dynamic_node.name[0] == '.' || dynamic_node.hidden) {
-                    continue; // suppress output of hidden elements
-                } else if (!dynamic_node.GET && !dynamic_node.PUT && !dynamic_node.POST && !dynamic_node.DELETE) {
-                    continue; // suppress output of nodes with no methods
-                }
-                SNPRINTF(len, buf, remain, "<%s%s>", pwd, dynamic_node.name);
-                print_ct(&dynamic_node, len, buf, remain);
-                SNPRINTF(len, buf, remain, ",");
+            } else if (children[i].name[0] == '.' || children[i].hidden) {
+                continue; // suppress output of hidden elements
+            } else if (!children[i].GET && !children[i].PUT && !children[i].POST && !children[i].DELETE) {
+                continue; // suppress output of nodes with no methods
             }
+            SNPRINTF(len, buf, remain, "<%s%s>", pwd, children[i].name);
+            print_ct(&children[i], len, buf, remain);
+            SNPRINTF(len, buf, remain, ",");
         }
+        free_dynamic_children(n, children);
     }
     if (node->children) {
         size_t pwdlen = strlen(pwd);
@@ -393,29 +409,28 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
             iter_coap_tree(cpbuf, *c, href_filter, parent_href_match || href_match((*c)->name, href_filter), len, buf, remain);
         }
     }
-    if (node->gens) {
+    if (node->gen) {
         size_t pwdlen = strlen(pwd);
-        for (const coap_gen_t *g = node->gens; *g != NULL; ++g) {
-            coap_meta_t iterator = 0;
-            while (1) {
-                coap_node_t dynamic_node = { .parent = node };
-                if ((**g)(&iterator, &dynamic_node)) {
-                    break;
-                }
-                if (dynamic_node.name == NULL) {
-                    continue; // suppress output of unnamed elements
-                } else if (!href_filter->str && (dynamic_node.name[0] == '.' || dynamic_node.hidden)) {
-                    continue; // suppress output of hidden elements
-                }
-                size_t cplen = strlen(dynamic_node.name);
-                char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
-                ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
-                ZCOAP_MEMCPY(cpbuf + pwdlen, dynamic_node.name, cplen);
-                cpbuf[pwdlen + cplen] = '/';
-                cpbuf[pwdlen + cplen + 1] = '\0';
-                iter_coap_tree(cpbuf, &dynamic_node, href_filter, parent_href_match || href_match(dynamic_node.name, href_filter), len, buf, remain);
+        coap_node_t *children = NULL;
+        size_t n = 0;
+        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
+        for (size_t i = 0; i < n && !code && children; ++i) {
+            // Populate parent pointers so the generator doesn't have to.
+            children[i].parent = node;
+            if (children[i].name == NULL) {
+                continue; // suppress output of unnamed elements
+            } else if (!href_filter->str && (children[i].name[0] == '.' || children[i].hidden)) {
+                continue; // suppress output of hidden elements
             }
+            size_t cplen = strlen(children[i].name);
+            char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
+            ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
+            ZCOAP_MEMCPY(cpbuf + pwdlen, children[i].name, cplen);
+            cpbuf[pwdlen + cplen] = '/';
+            cpbuf[pwdlen + cplen + 1] = '\0';
+            iter_coap_tree(cpbuf, &children[i], href_filter, parent_href_match || href_match(children[i].name, href_filter), len, buf, remain);
         }
+        free_dynamic_children(n, children);
     }
 }
 
@@ -1368,23 +1383,29 @@ static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_d
             }
         }
     }
-    for (const coap_gen_t *g = path->gens; g != NULL && *g != NULL; ++g) {
-        coap_meta_t iterator = 0;
-        while (1) {
-            coap_node_t dynamic_node = { .parent = path };
-            if ((**g)(&iterator, &dynamic_node)) {
-                break;
-            }
-            if (   !strncmp((char *)opt->val, dynamic_node.name, opt->len)
-                && strlen(dynamic_node.name) == opt->len) {
+    if (path->gen) {
+        coap_node_t *children = NULL;
+        size_t n = 0;
+        coap_code_t code = (*path->gen)(path, &ZCOAP_REALLOC, &n, &children);
+        for (size_t i = 0; i < n && !code && children; ++i) {
+            // Populate parent pointers so the generator doesn't have to.
+            children[i].parent = path;
+            if (   !strncmp((char *)opt->val, children[i].name, opt->len)
+                && strlen(children[i].name) == opt->len) {
                 --npath_opts;
                 if (!npath_opts) { // end of options
-                    return process_req_uri(req, nopts, opts, &dynamic_node);
+                    code = process_req_uri(req, nopts, opts, &children[i]);
+                    break;
                 } else { // continue searching; we have more path segments to compare
                     ++path_opts;
-                    return iter_req_uri(req, nopts, opts, npath_opts, path_opts, &dynamic_node);
+                    code = iter_req_uri(req, nopts, opts, npath_opts, path_opts, &children[i]);
+                    break;
                 }
             }
+        }
+        free_dynamic_children(n, children);
+        if (code) {
+            return code;
         }
     }
     if (path && path->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
@@ -1537,25 +1558,23 @@ static void coap_sort_children(const coap_node_t * const node)
  */
 static void iter_coap_sort(const coap_node_t * const node)
 {
+    if (node->init) {
+        (*node->init)(node);
+    }
     coap_sort_children(node);
     for (const coap_node_t * const *c = node->children; c != NULL && *c != NULL; ++c) {
-        if ((*c)->init) {
-            (*(*c)->init)(*c);
-        }
         iter_coap_sort(*c);
     }
-    for (const coap_gen_t *g = node->gens; g != NULL && *g != NULL; ++g) {
-        coap_meta_t iterator = 0;
-        while (1) {
-            coap_node_t dynamic_node = { .parent = node };
-            if((**g)(&iterator, &dynamic_node)) {
-                break;
-            }
-            if (dynamic_node.init) {
-                (*dynamic_node.init)(&dynamic_node);
-            }
-            iter_coap_sort(&dynamic_node);
+    if (node->gen) {
+        coap_node_t *children = NULL;
+        size_t n = 0;
+        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
+        for (size_t i = 0; i < n && !code && children; ++i) {
+            // Populate parent pointers so the generator doesn't have to.
+            children[i].parent = node;
+            iter_coap_sort(&children[i]);
         }
+        free_dynamic_children(n, children);
     }
 }
 

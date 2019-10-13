@@ -329,28 +329,42 @@ typedef void __attribute__((nonnull (1, 2))) (*coap_handler_t)(ZCOAP_METHOD_SIGN
 typedef void __attribute__((nonnull(1))) (*coap_init_t)(const coap_node_t * const node);
 typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile void *data);
 
-/*
- * coap_gen_t: meta-object generator function interface
+/**
+ * dnode_realloc_t
  *
- * The caller must allocate memory for iterator, object and metadata, and must
- * initialize iterator to 0.  The generator function should return 0 and write
- * dynamically generated data to object and metadata so long as there are more
- * objects available.  Each object is a dynamically generated node in our tree.
- * For each object, the generator also writes the metadata output variable with
- * with the information necessary to call the object methods in an instance-
- * specific manner.
+ * Dynamic URI re-allocator.  Dynamic node generator functions must allocate
+ * their output nodes with the passed re-allocator.  The server will free these
+ * on behalf of the generators with a symetric free function.
  *
- * Once there are no more dynamic objects, the generator should return non-zero.
+ * @param size number of bytes to allocate
+ * @return pointer to allocated memory; NULL on allocation failure; may return NULL if size is 0
  */
-typedef int (*coap_gen_t)(coap_meta_t *iterator, coap_node_t *object);
+typedef void * (*dnode_realloc_t)(void *ptr, size_t new_size);
+
+/**
+ * coap_gen_t
+ *
+ * Dynamic URI generator interface.  Based on the passed parent context,
+ * the generator should populate 0 or more children.  Children must be allocated
+ * with the caller-passed allocator.  The caller then becomes responsible for
+ * freeing children with a symetric free function.
+ *
+ * @param parent parent node under which to dynamically generate child nodes
+ * @param allocator allocator for output child nodes.
+ * @param n (out) number of children generated
+ * @param children (out) allocated and dynamically populated children of the passed parent
+ * @return 0 on success, an appropriate CoAP error code on failure
+ */
+typedef coap_code_t __attribute__((nonnull (1, 2, 3, 4))) (*coap_gen_t)(const coap_node_t * const parent, dnode_realloc_t reallocator, size_t *n, coap_node_t **children);
 
 struct coap_node_s {
     const char *name; // node path segment
+    char *dname; // pointer to dynamic buffer for dynamically-allocated names from generator functions
     volatile void *data; // node data pointer
     const char *fmt; // print format for plain text responses; if NULL, zcoap.c utility GET functions use default format
     const coap_node_t *parent; // pointer to parent node, or NULL for the root node; set by zcoap.c
     const coap_node_t **children; // must be NULL or point to a NULL-terminated array of child noes
-    const coap_gen_t *gens; // must be NULL or point to a NULL-terminated array of child-node generators
+    coap_gen_t gen; // must be NULL or point to a child-node generator
     coap_handler_t GET;
     coap_handler_t PUT;
     coap_handler_t POST;

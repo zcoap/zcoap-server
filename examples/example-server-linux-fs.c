@@ -3,11 +3,42 @@
 #include <stdlib.h>
 #include "example-server-linux-fs.h"
 
-static struct {
-    size_t n;
-    char **name;
-} file_listing = { 0 };
-
+/**
+ * Build a solidus-delimited path string from node through its parents all the
+ * way to the tree root.
+ *
+ * @param node starting tree-node from which to build the path
+ * @return an allocated and null-terminated string containing the solidus-delimited path from the tree root to node; on error, returns NULL
+ */
+static char *build_path(const coap_node_t *node)
+{
+    size_t path_len = 1 /* leading solidus ('/') */ + 1 /* null-terminating '\0' */;
+    path_len += node->name ? strlen(node->name) : 0;
+    char *path = malloc(path_len);
+    if (path == NULL) {
+        return NULL;
+    }
+    path[0] = '/';
+    memcpy(&path[1], node->name, path_len - 2);
+    path[path_len - 1] = '\0'; /* must null-terminate */
+    const coap_node_t *cur = node->parent;
+    while (cur) {
+        size_t segment_len = 1 /* leading solidus ('/') */;
+        segment_len += cur->name ? strlen(cur->name) : 0;
+        char *resized = realloc(path, path_len + segment_len);
+        if (resized == NULL) {
+            free(path);
+            return NULL;
+        }
+        path = resized;
+        memmove(path + segment_len, path, path_len);
+        path[0] = '/';
+        memcpy(&path[1], cur->name, segment_len - 1);
+        path_len += segment_len;
+        cur = cur->parent;
+    }
+    return path;
+}
 
 /**
  * GET handler for dynamically-generated children of ./fs.  Return the contents
@@ -15,8 +46,14 @@ static struct {
  */
 static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 {
-    ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
-    FILE *fptr = fopen(node->name, "r");
+    ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_SENTINEL);
+    char *path = build_path(node);
+    if (path == NULL) {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+        return;
+    }
+    FILE *fptr = fopen(path, "r");
+    free(path); // done with this
     if (fptr == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
@@ -54,81 +91,49 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 }
 
 /**
- * Free our local file listing.
- */
-static void free_file_listing(void)
-{
-    for (size_t i = 0; i < file_listing.n; ++i)
-    {
-        if (file_listing.name[i])
-        {
-            free(file_listing.name[i]);
-        }
-    }
-    free(file_listing.name);
-    memset(&file_listing, 0, sizeof(file_listing));
-}
-
-/**
- * Populate our local file listing.
- */
-static void populate_file_list()
-{
-    free_file_listing();
-    DIR *d;
-    struct dirent *dir;
-    d = opendir(".");
-    if (d)
-    {
-        while ((dir = readdir(d)) != NULL)
-        {
-            ++file_listing.n;
-            char **resized = realloc(file_listing.name, sizeof(file_listing.name[0]) * file_listing.n);
-            if (resized == NULL)
-            {
-                free_file_listing(); // no good!  maybe log this?
-                break;
-            }
-            file_listing.name = resized;
-            size_t filename_len = strlen(dir->d_name);
-            file_listing.name[file_listing.n - 1] = malloc(filename_len + 1);
-            if (file_listing.name[file_listing.n - 1] == NULL)
-            {
-                free_file_listing(); // no good!  maybe log this?
-                break;
-            }
-            memcpy(file_listing.name[file_listing.n - 1], dir->d_name, strlen(dir->d_name) + 1);
-        }
-        closedir(d);
-    }
-    return;
-}
-
-/**
- * Dynamic child-node generator for ./fs.  ls the current directory and add
- * a node for each file found.
+ * Magical dynamic child-node generator for filesystem reflection.  Contruct
+ * a solidus-delimited path from parent to the tree root.  ls this path in the
+ * filesystem and return children for all inodes at the path.  Each child
+ * recursively references coap_fs_gen.  Thus, we can reflect the entire
+ * filesystem tree starting at any node.
  *
- * @param iterator (in/out) iterator for maintaining state during the tree traversal
- * @param object (out) location to write the dynamic child node
- * @return 0 if a child node was produced, -1 if the generator is done producing children
+ * @param parent parent node under which to dynamically generate child nodes
+ * @param allocator allocator for output child nodes.
+ * @param n (out) number of children generated
+ * @param children (out) allocated and dynamically populated children of the passed parent
+ * @return 0 on success, an appropriate CoAP error code on failure
  */
-static int coap_fs_gen(coap_meta_t *iterator, coap_node_t *object)
+coap_code_t __attribute__((nonnull (1, 2, 3, 4))) coap_fs_gen(const coap_node_t *parent, dnode_realloc_t reallocator, size_t * const n, coap_node_t **children)
 {
-    if (!*iterator) {
-        // First pass, populate file list.
-        populate_file_list();
+    if (!parent || !reallocator || !n || !children) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
-    for (coap_meta_t i = *iterator; i < file_listing.n; ++i) {
-        if (file_listing.name[i] && strlen(file_listing.name[i])) {
-            *iterator = i + 1;
-            object->name = file_listing.name[i];
-            object->GET = &coap_fs_get;
-            return 0;
+    char *path = build_path(parent);
+    DIR *d = opendir(path);
+    free(path); // done with this
+    if (!d) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    struct dirent *dir;
+    while ((dir = readdir(d)) != NULL) {
+        ++*n;
+        coap_node_t *resized = (*reallocator)(*children, *n * sizeof(coap_node_t));
+        if (resized == NULL) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
+        *children = resized;
+        coap_node_t *child = &(*children)[*n - 1];
+        memset(child, 0, sizeof(*child));
+        size_t filename_len = strlen(dir->d_name);
+        child->dname = (*reallocator)(NULL, filename_len + 1);
+        if (!child->dname) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        memcpy(child->dname, dir->d_name, filename_len + 1);
+        child->name = child->dname;
+        child->GET = &coap_fs_get;
+        child->gen = &coap_fs_gen;
     }
-    *iterator = file_listing.n;
-    return -1;
+    closedir(d);
+    return 0;
 }
-
-static coap_gen_t fs_gens[] = { &coap_fs_gen, NULL };
-const coap_node_t fs_uri = { .name = "fs", .gens = fs_gens };
