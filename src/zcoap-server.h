@@ -440,6 +440,8 @@ extern void coap_put_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 
 #if INT_MAX == INT16_MAX
+#define ZCOAP_FMT_INT ZCOAP_FMT_I16
+#define ZCOAP_FMT_UINT ZCOAP_FMT_U16
 #define coap_return_uint coap_return_u16
 #define coap_return_int coap_return_i16
 #define coap_get_uint coap_get_u16
@@ -449,6 +451,8 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #define coap_put_uint coap_put_u16
 #define coap_put_int coap_put_i16
 #elif INT_MAX == INT32_MAX
+#define ZCOAP_FMT_INT ZCOAP_FMT_I32
+#define ZCOAP_FMT_UINT ZCOAP_FMT_U32
 #define coap_return_uint coap_return_u32
 #define coap_return_int coap_return_i32
 #define coap_get_uint coap_get_u32
@@ -458,6 +462,8 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #define coap_put_uint coap_put_u32
 #define coap_put_int coap_put_i32
 #elif INT_MAX == INT64_MAX
+#define ZCOAP_FMT_INT ZCOAP_FMT_I64
+#define ZCOAP_FMT_UINT ZCOAP_FMT_U64
 #define coap_return_uint coap_return_u64
 #define coap_return_int coap_return_i64
 #define coap_get_uint coap_get_u64
