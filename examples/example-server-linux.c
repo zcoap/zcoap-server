@@ -9,8 +9,9 @@
 
 #include "../src/zcoap-server.h"
 #include "example-server-linux-fs.h"
+#include "example-server-linux-telemetry.h"
 
-static const coap_node_t *root_children[] = { &wellknown_uri, &fs_uri, NULL };
+static const coap_node_t *root_children[] = { &wellknown_uri, &fs_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };
 
 #define DEFAULT_PORT 5683
