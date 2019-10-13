@@ -744,7 +744,7 @@ void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req)
     if (   req == NULL
         || req->msg == NULL
         || req->len < sizeof(coap_msg_t)
-        || req->acker == NULL) {
+        || req->responder == NULL) {
         return;
     }
     if (req->msg->type == COAP_TYPE_NON_CONFIRMABLE) {
@@ -758,7 +758,7 @@ void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req)
     ack.type = COAP_TYPE_ACK;
     ack.code.code_class = 0;
     ack.code.code_detail = 0;
-    ((*req->acker)(req, &ack));
+    ((*req->responder)(req, sizeof(ack), &ack));
     // Note transmission of ACK to illicit non-piggy-backed
     // response behavior in coap_rsp().
     req->state.acked = true;

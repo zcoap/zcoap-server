@@ -20,17 +20,22 @@ static void error(char *msg)
     exit(1);
 }
 
-static void coap_udp_ack(coap_req_data_t * const req, const coap_msg_t *ack)
-{
-    const int sockfd = req->context;
-    const struct sockaddr_in *cli_addr = req->route;
-    ssize_t sent = sendto(sockfd, ack, sizeof(*ack), MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
-    if (sent < sizeof(*ack))
-    {
-        error("socket write error on ack");
-    }
-}
-
+/**
+ * UDP CoAP responder and ack function.  Used as callback from zcoap-server.
+ * Injects the passed CoAP message into our UDP stack.  req will have been
+ * populated by our dispatch() function with the necessary context information
+ * for routing a message back to the requesting client.  In our case, this will
+ * be:
+ *
+ *    * server socket file descriptor
+ *    * client sockaddr_in as written by recvfrom
+ *
+ * Together, we can use these in the sendto function to route the response.
+ *
+ * @param req CoAP request structure and metadata, including context (socket file descriptor) and route (client sockaddr_in)
+ * @param len length of the CoAP response message to send back to the client
+ * @param rsp CoAP response message to send back to the client
+ */
 static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
 {
     const int sockfd = req->context;
@@ -56,7 +61,6 @@ static void dispatch(int sockfd, const struct sockaddr_in *cli_addr, const size_
         .route = cli_addr,
         .msg = (const coap_msg_t *)payload,
         .len = len,
-        .acker = &coap_udp_ack,
         .responder = &coap_udp_respond,
     };
     coap_rx(&req, &root);
@@ -88,13 +92,13 @@ int main(int argc, char *argv[])
         }
         uint8_t buf[pending];
         struct sockaddr_in cli_addr =  { 0 };
-        socklen_t clilen = sizeof(cli_addr);
-        ssize_t received = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &clilen);
+        socklen_t cli_len = sizeof(cli_addr);
+        ssize_t received = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &cli_len);
         if (received != pending)
         {
             error("ERROR reading from socket - pending and received counts do not match");
         }
-        if (clilen > sizeof(cli_addr))
+        if (cli_len > sizeof(cli_addr))
         {
             error("recvfrom error - client source address information is truncated");
         }

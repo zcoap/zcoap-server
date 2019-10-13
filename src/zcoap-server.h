@@ -214,40 +214,13 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
 typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data_t * const req);
 
 /**
- * coap_acker_t
- *
- * zcoap-server confirmable message ACK dispatch interface.
- *
- * Request handler methods may call coap_ack for stand-alone immediate ACK when
- * non-piggy-packed response behavior is preferred over the ZCoAP CoAP server's
- * default piggy-backed ACK / response behavior.
- *
- * This is appropriate for long-running operations when immediate ACK is
- * preferred and response will be generated sometime later.
- *
- * When request handler methods call coap_ack, the ZCoAP CoAP server uses the
- * implementation's acker function to dispatch ACK into the implementation's
- * transport layer.  On dispatch, the ZCoAP CoAP server will set CONFIRMABLE
- * messages to type NON-CONFIRMABLE.  This will prevent duplicate ACK when
- * requests are eventually passed to coap_rsp.
- *
- * @param req initiating CoAP request with implementation-specific metadata
- * @param ack buffer containing a fully-formed ACK for injection into the implementation-specific transport layer; note that ACK is by definition sizeof(coap_msg_t)
- */
-typedef void __attribute__((nonnull (1))) (* const coap_acker_t)(coap_req_data_t * const req, const coap_msg_t *ack);
-
-/**
  * coap_responder_t
  *
- * zcoap-server request responder interface.
+ * zcoap-server request responder and acker interface.
  *
- * Called at the conclusion of server processing to transmit a response to the
- * initiating client request by injection into the implementation-specific
- * transport layer.  Confirmable messages for which stand-alone ACK has not
- * been issued will be emitted as piggy-backed responses.
- *
- * Server executes ->discard() immediately after call to the implemented
- * responder.
+ * Called for all message transmissions back to the requesting client.  These
+ * may be any of stand-alone ACK, piggy-backed response and non-piggy-backed
+ * response.
  *
  * @param req incoming CoAP request with implementation-specific metadata
  * @param len length of the CoAP response message to be injected into the implementation-specific transport layer
@@ -319,28 +292,9 @@ struct coap_req_data_s {
      */
     coap_discard_t discard;
 
-    /*
-     * acker
-     *
-     * Implementation-specific 'ack' function for stand-alone ACK with
-     * non-piggy-backed responses.  As intent for this is stand-alone ACK
-     * before non-piggy-backed response, the server will continue to access
-     * *header and *msg after this is called.
-     *
-     * Need for stand-alone ACK is dependent on the URI.  Method handlers may
-     * therefore choose to execute this or not.
-     *
-     * May be left NULL if stand-alone ACK and non-piggy-backed responses are
-     * not needed.
-     */
-    coap_acker_t acker;
-
     /**
-     * Implementation-specific responder function.  For issuing both
-     * piggy-backed and non-piggy-backed responses.  An implicit contract
-     * exists with call to this function: the server must only call this
-     * function once and must not access *header or *msg after this function
-     * is called.
+     * Implementation-specific responder function.  For issuing any of
+     * stand-alone ACK, piggy-backed response and non-piggy-backed response.
      */
     coap_responder_t responder;
 
