@@ -259,10 +259,10 @@ typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_da
  */
 struct coap_req_data_s {
     /**
-     * response_context
+     * route
      *
-     * Context to pass back to responder and acker functions.  Can be anything
-     * as required by a particular implementation.
+     * Client address information to pass back to responder and acker functions.
+     * Can be anything as required by a particular implementation.
      *
      * In a socket-based implementation, this would likely be a pointer to
      * struct sockaddr_in as populated by recvfrom().  This can be passed to
@@ -277,7 +277,9 @@ struct coap_req_data_s {
      * contains the client's outbound port, on which it will also listen for
      * responses.
      */
-    void * const response_context;
+    const void * const route;
+
+    const int context;
 
     /**
      * msg

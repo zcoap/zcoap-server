@@ -14,10 +14,52 @@ static const coap_node_t root = { .children = root_children };
 
 #define DEFAULT_PORT 5683
 
-void error(char *msg)
+static void error(char *msg)
 {
     perror(msg);
     exit(1);
+}
+
+static void coap_udp_ack(coap_req_data_t * const req, const coap_msg_t *ack)
+{
+    const int sockfd = req->context;
+    const struct sockaddr_in *cli_addr = req->route;
+    ssize_t sent = sendto(sockfd, ack, sizeof(*ack), MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
+    if (sent < sizeof(*ack))
+    {
+        error("socket write error on ack");
+    }
+}
+
+static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
+{
+    const int sockfd = req->context;
+    const struct sockaddr_in *cli_addr = req->route;
+    ssize_t sent = sendto(sockfd, rsp, len, MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
+    if (sent < len)
+    {
+        error("socket write error on respond");
+    }
+}
+
+/**
+ * Dispatch a received datagram payload into our CoAP server!
+ *
+ * @param cli_addr client socket address for server responses
+ * @param len datagram payload length
+ * @parm payload UDP payload - presumed to be a CoAP message structure
+ */
+static void dispatch(int sockfd, const struct sockaddr_in *cli_addr, const size_t len, const uint8_t payload[])
+{
+    coap_req_data_t req = {
+        .context = sockfd,
+        .route = cli_addr,
+        .msg = (const coap_msg_t *)payload,
+        .len = len,
+        .acker = &coap_udp_ack,
+        .responder = &coap_udp_respond,
+    };
+    coap_rx(&req, &root);
 }
 
 int main(int argc, char *argv[])
@@ -56,6 +98,7 @@ int main(int argc, char *argv[])
         {
             error("recvfrom error - client source address information is truncated");
         }
+        dispatch(sockfd, &cli_addr, received, buf);
     }
     return 0;
 }
