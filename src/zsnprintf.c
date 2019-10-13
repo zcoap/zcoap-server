@@ -36,8 +36,10 @@
  * to the library implementation.
  */
 
+#include <float.h>
 #include <limits.h>
 #include <math.h>
+#include <tgmath.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
@@ -685,7 +687,6 @@ static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 #define zllxtoa zx64toa
 #define zlltoa zx64toa /* TODO: int64 decimal printing */
 #define zulltoa zx64toa /* TODO: uint64 decimal printing */
-
 
 // WARNING: saturates to INT32_MIN/INT32_MAX; fraction limited to 4 digits
 static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_flags_t flags)

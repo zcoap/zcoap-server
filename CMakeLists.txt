@@ -18,6 +18,9 @@ add_library(zcoap-server
             src/zsnprintf.c
             src/zsnprintf.h)
 
+target_link_libraries(zcoap-server
+                      m)
+
 IF (WIN32)
 
 add_executable(example-server-win32
@@ -27,6 +30,9 @@ ELSE()
 
 add_executable(example-server-linux
                examples/example-server-linux.c)
+
+target_link_libraries(example-server-linux
+                      zcoap-server)
 
 ENDIF()
 
