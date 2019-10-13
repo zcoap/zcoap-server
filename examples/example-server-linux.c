@@ -8,8 +8,9 @@
 #include <netinet/in.h>
 
 #include "../src/zcoap-server.h"
+#include "example-server-linux-fs.h"
 
-static const coap_node_t *root_children[] = { &wellknown_uri, NULL };
+static const coap_node_t *root_children[] = { &wellknown_uri, &fs_uri, NULL };
 static const coap_node_t root = { .children = root_children };
 
 #define DEFAULT_PORT 5683
@@ -68,6 +69,8 @@ static void dispatch(int sockfd, const struct sockaddr_in *cli_addr, const size_
 
 int main(int argc, char *argv[])
 {
+    coap_init(&root); // must always init our tree before use!
+
     const int portno = DEFAULT_PORT;
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)

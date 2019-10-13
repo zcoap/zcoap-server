@@ -29,7 +29,8 @@ add_executable(example-server-win32
 ELSE()
 
 add_executable(example-server-linux
-               examples/example-server-linux.c)
+               examples/example-server-linux.c
+               examples/example-server-linux-fs.c)
 
 target_link_libraries(example-server-linux
                       zcoap-server)

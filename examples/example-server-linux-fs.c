@@ -1,3 +1,6 @@
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "example-server-linux-fs.h"
 
 static struct {
@@ -12,30 +15,41 @@ static struct {
  */
 static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 {
-    ZCOAP_METHOD_HEADER(COAP_FMT_SENTINEL);
+    ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
     FILE *fptr = fopen(node->name, "r");
     if (fptr == NULL) {
-        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
     char buf[4096];
     char *file_contents = NULL;
     size_t total = 0;
-    size_t next;
-    while ((cur = fgets(buf, sizeof(buf), fptr)))
+    while (fgets(buf, sizeof(buf), fptr))
     {
-        char *new = realloc(file_contents, total + nex);
-        if (new == NULL)
+        size_t len = strlen(buf);
+        char *resized = realloc(file_contents, total + len);
+        if (resized == NULL)
         {
             free(file_contents);
-            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
             return;
         }
-        file_contents = new;
-        memcpy(&file_contents[total], buf, next);
-        total += next;
+        file_contents = resized;
+        memcpy(&file_contents[total], buf, len);
+        total += len;
     }
-    coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_STREAM, total, file_contents);
+    if (ferror)
+    {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+    }
+    else
+    {
+        if (total)
+        {
+            total -= 1; // strip '\0' before transmission
+        }
+        coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_STREAM, total, file_contents);
+    }
     free(file_contents);
 }
 
@@ -51,7 +65,7 @@ static void free_file_listing(void)
             free(file_listing.name[i]);
         }
     }
-    file_listing(file_listing.name);
+    free(file_listing.name);
     memset(&file_listing, 0, sizeof(file_listing));
 }
 
@@ -69,13 +83,13 @@ static void populate_file_list()
         while ((dir = readdir(d)) != NULL)
         {
             ++file_listing.n;
-            **new = realloc(file_listing.name, sizeof(file_listing.name[0]) * file_listing.n);
-            if (new == NULL)
+            char **resized = realloc(file_listing.name, sizeof(file_listing.name[0]) * file_listing.n);
+            if (resized == NULL)
             {
                 free_file_listing(); // no good!  maybe log this?
                 break;
             }
-            file_listing.name = new;
+            file_listing.name = resized;
             size_t filename_len = strlen(dir->d_name);
             file_listing.name[file_listing.n - 1] = malloc(filename_len + 1);
             if (file_listing.name[file_listing.n - 1] == NULL)
@@ -83,11 +97,11 @@ static void populate_file_list()
                 free_file_listing(); // no good!  maybe log this?
                 break;
             }
-            memcpy(file_listing.name[file_listing.n - 1], filename_len + 1, dir->d_name)
+            memcpy(file_listing.name[file_listing.n - 1], dir->d_name, strlen(dir->d_name) + 1);
         }
         closedir(d);
     }
-    return(0);
+    return;
 }
 
 /**
