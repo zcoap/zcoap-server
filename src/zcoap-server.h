@@ -259,28 +259,25 @@ typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_da
  */
 struct coap_req_data_s {
     /**
-     * header
+     * response_context
      *
-     * Buffer to pass back to responder and acker functions.  Can be anything
-     * as required by a particular implementation.  But typically this will be
-     * a pointer to a data frame header from a lower layer in the communication
-     * stack.  For instance, in an IPv4/UDP implementation, this may be a
-     * pointer to the IPv4 header.  For an IPv4/UDP responder, the IPv4 header
-     * contains the information necessary to route a CoAP response back to the
-     * requesting agent.
-     */
-    void * const header;
-
-    /**
-     * context
+     * Context to pass back to responder and acker functions.  Can be anything
+     * as required by a particular implementation.
      *
-     * Implementation-specific context data to pass back to responder and acker
-     * functions.  For an IPv4/UDP posix responder, this could for instance be
-     * a file descriptor for a socket bound to the client/server connection
-     * tuple.  In such an environment, the responder may simply write the
-     * response to the file descriptor.
+     * In a socket-based implementation, this would likely be a pointer to
+     * struct sockaddr_in as populated by recvfrom().  This can be passed to
+     * sendto() for client responses.
+     *
+     * In an embedded platform, this would more typically be a pointer to a
+     * data frame header from a lower layer in the communication stack.  For
+     * instance, in an embedded IPv4/UDP implementation, this may be a pointer
+     * to the IPv4 header.  For an IPv4/UDP responder, the IPv4 header contains
+     * the information necessary to route a CoAP response back to the requesting
+     * node.  The UDP header (which will immediately follow the IPv4 header)
+     * contains the client's outbound port, on which it will also listen for
+     * responses.
      */
-    const int context;
+    void * const response_context;
 
     /**
      * msg
