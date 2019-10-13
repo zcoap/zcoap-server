@@ -258,6 +258,15 @@ typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_da
 /**
  */
 struct coap_req_data_s {
+
+    /**
+     * Implementation-specific, transport-layer context.  Can be anything as
+     * required for a particular implementation.  In a socket-based
+     * implementation, this will typically be a socket file descriptor that
+     * may be written for ACK and response.
+     */
+    const int context;
+
     /**
      * route
      *
@@ -278,8 +287,6 @@ struct coap_req_data_s {
      * responses.
      */
     const void * const route;
-
-    const int context;
 
     /**
      * msg
