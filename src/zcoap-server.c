@@ -1238,13 +1238,13 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                     if (node->GET) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: servicing GET for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: servicing GET for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL);
                         return 0;
                     } else {
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: GET method unsupported for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: GET method unsupported for path '%s'\n", __func__, node->name);
                         #endif
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
@@ -1252,13 +1252,13 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                     if (node->PUT) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG(TX_GLOBAL, "%s: servicing PUT for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: servicing PUT for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL);
                         return 0;
                     } else {
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: PUT method unsupported for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: PUT method unsupported for path '%s'\n", __func__, node->name);
                         #endif
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
@@ -1266,13 +1266,13 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                     if (node->POST) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: servicing POST for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: servicing POST for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL);
                         return 0;
                     } else {
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: POST method unsupported for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: POST method unsupported for path '%s'\n", __func__, node->name);
                         #endif
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
@@ -1280,25 +1280,25 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                     if (node->DELETE) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: servicing DELETE for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: servicing DELETE for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->DELETE)(node, req, nopts, opts, ct, len, payload, NULL);
                         return 0;
                     } else {
                         #ifdef ZCOAP_DEBUG
-                        ZCOAP_DEBUG("%s: DELETE method unsupported for path '%s'", __func__, node->name);
+                        ZCOAP_DEBUG("%s: DELETE method unsupported for path '%s'\n", __func__, node->name);
                         #endif
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
                 default:
                     #ifdef ZCOAP_DEBUG
-                    ZCOAP_DEBUG("%s: unable to service method %u for path '%s'", __func__, req->msg->code.code_detail, node->name);
+                    ZCOAP_DEBUG("%s: unable to service method %u for path '%s'\n", __func__, req->msg->code.code_detail, node->name);
                     #endif
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
             }
         default:
             #ifdef ZCOAP_DEBUG
-            ZCOAP_DEBUG("%s: ignoring message with class %u and path option '%s'", __func__, req->msg->code.code_class, node->name);
+            ZCOAP_DEBUG("%s: ignoring message with class %u and path option '%s'\n", __func__, req->msg->code.code_class, node->name);
             #endif
             return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
@@ -1418,7 +1418,7 @@ static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_d
         char buf[opt->len + 1];
         ZCOAP_MEMCPY(buf, opt->val, opt->len);
         buf[opt->len] = '\0';
-        ZCOAP_DEBUG("%s: unable to resolve request path '%s'!", __func__, buf);
+        ZCOAP_DEBUG("%s: unable to resolve request path '%s'!\n", __func__, buf);
     }
     #endif
     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);

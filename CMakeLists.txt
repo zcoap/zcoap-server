@@ -31,7 +31,9 @@ ELSE()
 add_executable(example-server-linux
                examples/example-server-linux.c
                examples/example-server-linux-fs.c
-               examples/example-server-linux-telemetry.c)
+               examples/example-server-linux-fs.h
+               examples/example-server-linux-telemetry.c
+               examples/example-server-linux-telemetry.h)
 
 target_link_libraries(example-server-linux
                       zcoap-server)

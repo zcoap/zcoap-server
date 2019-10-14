@@ -3,6 +3,10 @@
  * Author: Michael Sandstedt
  *
  * An snprintf that doesn't suck.  Not full-featured, but not broken either...
+ * This was made to work around problems in the Microchip XC16 compiler when
+ * targeting DSPIC33 parts.
+ *
+ * See further comments in zsnprintf.c file.
  *
  * Created on January 1, 2017, 11:38 AM
  */

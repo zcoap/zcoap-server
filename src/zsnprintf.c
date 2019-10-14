@@ -6,7 +6,7 @@
  *
  * An snprintf that actually works and won't kill performance.
  *
- * The snprintf that's packaged with v1.24 of the XC16 compiler is hopelessly
+ * The snprintf that's packaged with v1.24 of Microchip's XC16 compiler is hopelessly
  * broken and does *not* respect the maximum character argument.  It's also dog
  * slow.  To add insult to injury, while it's parsing and printing, it achieves
  * thread safety by disabling interrupts!

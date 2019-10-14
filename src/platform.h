@@ -8,6 +8,7 @@
  * Created on September 12th, 2019
  */
 
+
 #ifndef ZCOAP_PLATFORM_H
 #define ZCOAP_PLATFORM_H
 
@@ -35,6 +36,7 @@
  * Implementation may define a variadic debug function in order to enable debug
  * logging from the ZCoAP server.
  */
-//#define ZCOAP_DEBUG(...) ({ })
+#define ZCOAP_DEBUG(format, args...) fprintf (stderr, format, args)
+
 
 #endif /* ZCOAP_PLATFORM_H */
