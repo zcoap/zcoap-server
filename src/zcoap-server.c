@@ -319,14 +319,16 @@ static void print_ct(const coap_node_t * const node, size_t *len, char **buf, si
     #endif /* ZCOAP_EXTENSIONS */
 }
 
-typedef struct iter_coap_tree_data_s {
-    char *pwd;
-    const href_filter_t *href_filter;
+typedef struct iter_wellknown_core_data_s {
+    const char * const pwd;
+    const href_filter_t * const href_filter;
     const bool parent_href_match;
-    size_t *len;
+    size_t * const len;
     char **buf;
-    size_t *remain;
-} iter_coap_tree_data_t;
+    size_t * const remain;
+} iter_wellknown_core_data_t;
+
+static coap_code_t iter_wellknown_core(const coap_node_t * const node, void *data); // forward declaration
 
 /**
  * Recursive URI tree iterator for performing a depth-first walk of the URI tree
@@ -340,89 +342,51 @@ typedef struct iter_coap_tree_data_s {
  * @param buf buffer to print into
  * @param remain number of bytes available in buf
  */
-static coap_code_t iter_coap_tree(const coap_node_t * const node, void *data)
+static coap_code_t iter_wellknown_core(const coap_node_t * const node, const void *data)
 {
-    iter_coap_tree_data_t *iter_data = (iter_coap_tree_data_t *)data;
+    iter_wellknown_core_data_t * const pdata = (iter_wellknown_core_data_t *)data;
+    bool match = pdata->parent_href_match; // always inherit parent match
+    do {
+        if (name->name == NULL) {
+            break; // suppress output of unnamed elements
+        } else if (pdata->href_filter->str) {
+            match = match || href_match(node->name, pdata->href_filter);
+            if (!match) {
+                break;
+            }
+        } else if (!node->GET && !node->PUT && !node->POST && !node->DELETE) {
+            break; // suppress output of nodes with no methods
+        } else if (node->name[0] == '.' || node->hidden) {
+            return 0; // suppress output of hidden tree segments
+        }
+        SNPRINTF(len, buf, remain, "<%s%s>", pwd, (*c)->name);
+        print_ct(node, len, buf, remain);
+        SNPRINTF(len, buf, remain, ",");
+    } while (0);
+    const size_t pwdlen = strlen(pwd);
+    const size_t cplen = strlen(node->name);
+    char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
+    ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
+    ZCOAP_MEMCPY(cpbuf + pwdlen, node->name, cplen);
+    cpbuf[pwdlen + cplen] = '/';
+    cpbuf[pwdlen + cplen + 1] = '\0';
+    const iter_wellknown_core_data_t cdata = {
+        .pwd = cpbuf,
+        .href_filter = pdata->href_filter,
+        .parent_href_match = match,
+        .len = .pdata->len,
+        .buf = .pdata->buf,
+        .remain = .pdata->buf,
+    };
     if (node->children) {
         for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
-            if ((*c)->name == NULL) {
-                continue; // suppress output of unnamed elements
-            } else if (href_filter->str) {
-                if (!parent_href_match && !href_match((*c)->name, href_filter)) {
-                    continue;
-                }
-            } else if ((*c)->name[0] == '.' || (*c)->hidden) {
-                continue; // suppress output of hidden elements
-            } else if (!(*c)->GET && !(*c)->PUT && !(*c)->POST && !(*c)->DELETE) {
-                continue; // suppress output of nodes with no methods
-            }
-            SNPRINTF(len, buf, remain, "<%s%s>", pwd, (*c)->name);
-            print_ct(*c, len, buf, remain);
-            SNPRINTF(len, buf, remain, ",");
+            iter_coap_tree(*c, &cdata);
         }
     }
     if (node->gen) {
-        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
-        for (size_t i = 0; i < n && !code && children; ++i) {
-            // Populate parent pointers so the generator doesn't have to.
-            children[i].parent = node;
-            if (children[i].name == NULL) {
-                continue; // suppress output of unnamed elements
-            } else if (href_filter->str) {
-                if (!parent_href_match && !href_match(children[i].name, href_filter)) {
-                    continue;
-                }
-            } else if (children[i].name[0] == '.' || children[i].hidden) {
-                continue; // suppress output of hidden elements
-            } else if (!children[i].GET && !children[i].PUT && !children[i].POST && !children[i].DELETE) {
-                continue; // suppress output of nodes with no methods
-            }
-            SNPRINTF(len, buf, remain, "<%s%s>", pwd, children[i].name);
-            print_ct(&children[i], len, buf, remain);
-            SNPRINTF(len, buf, remain, ",");
-        }
-        free_dynamic_children(n, children);
+        (*node->gen)(node, &cdata);
     }
-    if (node->children) {
-        size_t pwdlen = strlen(pwd);
-        for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
-            if ((*c)->name == NULL) {
-                continue; // suppress output of unnamed elements
-            } else if (!href_filter->str && ((*c)->name[0] == '.' || (*c)->hidden)) {
-                continue; // suppress output of hidden elements
-            }
-            size_t cplen = strlen((*c)->name);
-            char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
-            ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
-            ZCOAP_MEMCPY(cpbuf + pwdlen, (*c)->name, cplen);
-            cpbuf[pwdlen + cplen] = '/';
-            cpbuf[pwdlen + cplen + 1] = '\0';
-            iter_coap_tree(cpbuf, *c, href_filter, parent_href_match || href_match((*c)->name, href_filter), len, buf, remain);
-        }
-    }
-    if (node->gen) {
-        size_t pwdlen = strlen(pwd);
-        coap_node_t *children = NULL;
-        size_t n = 0;
-        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
-        for (size_t i = 0; i < n && !code && children; ++i) {
-            // Populate parent pointers so the generator doesn't have to.
-            children[i].parent = node;
-            if (children[i].name == NULL) {
-                continue; // suppress output of unnamed elements
-            } else if (!href_filter->str && (children[i].name[0] == '.' || children[i].hidden)) {
-                continue; // suppress output of hidden elements
-            }
-            size_t cplen = strlen(children[i].name);
-            char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
-            ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
-            ZCOAP_MEMCPY(cpbuf + pwdlen, children[i].name, cplen);
-            cpbuf[pwdlen + cplen] = '/';
-            cpbuf[pwdlen + cplen + 1] = '\0';
-            iter_coap_tree(cpbuf, &children[i], href_filter, parent_href_match || href_match(children[i].name, href_filter), len, buf, remain);
-        }
-        free_dynamic_children(n, children);
-    }
+    return 0;
 }
 
 /**
@@ -439,7 +403,15 @@ static size_t snprintf_coap_tree(char *buf, size_t remain, const coap_node_t *ro
 {
     char *root_pwd = "/";
     size_t len = 0;
-    iter_coap_tree(root_pwd, root, href_filter, href_match("", href_filter), &len, &buf, &remain);
+    const iter_wellknown_core_data_t iter_data = {
+        .pwd = "/";
+        .href_filter = href_filter,
+        .parent_href_match = false,
+        .len = 0;
+        .buf = &buf,
+        .remain = &remain,
+    };
+    iter_coap_tree(root, &iter_data);
     return len;
 }
 
