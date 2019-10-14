@@ -319,22 +319,14 @@ static void print_ct(const coap_node_t * const node, size_t *len, char **buf, si
     #endif /* ZCOAP_EXTENSIONS */
 }
 
-/**
- * Free children and all of their allocated name fields.  These will have been
- * allocated by generator functions with ZCOAP_REALLOC.
- */
-static void free_dynamic_children(size_t n, coap_node_t *children)
-{
-    if (!children) {
-        return;
-    }
-    for (size_t i = 0; i < n; ++i) {
-        if (children->dname) {
-            ZCOAP_FREE(children->dname);
-        }
-    }
-    ZCOAP_FREE(children);
-}
+typedef struct iter_coap_tree_data_s {
+    char *pwd;
+    const href_filter_t *href_filter;
+    const bool parent_href_match;
+    size_t *len;
+    char **buf;
+    size_t *remain;
+} iter_coap_tree_data_t;
 
 /**
  * Recursive URI tree iterator for performing a depth-first walk of the URI tree
@@ -348,8 +340,9 @@ static void free_dynamic_children(size_t n, coap_node_t *children)
  * @param buf buffer to print into
  * @param remain number of bytes available in buf
  */
-static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href_filter_t *href_filter, const bool parent_href_match, size_t *len, char **buf, size_t *remain)
+static coap_code_t iter_coap_tree(const coap_node_t * const node, void *data)
 {
+    iter_coap_tree_data_t *iter_data = (iter_coap_tree_data_t *)data;
     if (node->children) {
         for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
             if ((*c)->name == NULL) {
@@ -369,8 +362,6 @@ static void iter_coap_tree(char *pwd, const coap_node_t * const node, const href
         }
     }
     if (node->gen) {
-        coap_node_t *children = NULL;
-        size_t n = 0;
         coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
         for (size_t i = 0; i < n && !code && children; ++i) {
             // Populate parent pointers so the generator doesn't have to.
@@ -1348,6 +1339,18 @@ static size_t coap_count_children(const coap_node_t * const node)
 // Forward declaration.
 static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], size_t npath_opts, const coap_msg_opt_t *path_opts, const coap_node_t * const path);
 
+typedef struct iter_req_data_s {
+    coap_req_data_t * const req;
+    const size_t nopts;
+    const coap_msg_opt_t otps[];
+    size_t npath_opts;
+    const coap_msg_opt_t *path_opts;
+} iter_req_data_t;
+
+typedef union iter_data_u {
+    iter_req_data_t iter_req_data;
+} iter_data_t;
+
 /**
  * Iterate through the tree starting at path to find a match
  * to the path as defined by the passed path_opts array.
@@ -1359,9 +1362,20 @@ static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_d
  * @param path_opts array of path option pointers into req
  * @param path node defining the top of a tree against which request path should be matched
  */
-static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], size_t npath_opts, const coap_msg_opt_t *path_opts, const coap_node_t * const path)
+static coap_code_t iter_req(coap_node_t * const node, iter_data_t idata)
 {
-    size_t count = coap_count_children(path);
+    iter_req_data_t *req_data = *idata.iter_req_data;
+    if (   !req_data->npath_opts
+        || strncmp(req_data->path_opts->val, node->name, req_data->path_opts->len)
+        || strlen(node->name) != req_data->path_opts.len) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
+    }
+    --req_data->npath_opts;
+    ++req_data->path_opts;
+    if (!req_data->npath_opts) {
+        process_req_uri(req, nopts, opts, &node);
+    }
+    size_t count = coap_count_children(node);
     const coap_msg_opt_t *opt = &path_opts[0];
     if (count && opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
         char keyname[opt->len + 1];
@@ -1550,32 +1564,29 @@ static void coap_sort_children(const coap_node_t * const node)
     qsort(node->children, count, sizeof(node->children[0]), coap_node_cmp);
 }
 
+static coap_code_t iter_coap_sort(const coap_node_t * const node, void *data); // forward declaration
+
 /**
  * Recursive CoAP URI tree sort iterator.  Also executes init on nodes where
  * init is specified.
  *
  * @param node root node from which to iterate
+ * @param data unused
+ * @return 0 on success, else an appropriate CoAP error code
  */
-static void iter_coap_sort(const coap_node_t * const node)
+static coap_code_t iter_coap_sort(const coap_node_t * const node, void *data)
 {
     if (node->init) {
         (*node->init)(node);
     }
     coap_sort_children(node);
     for (const coap_node_t * const *c = node->children; c != NULL && *c != NULL; ++c) {
-        iter_coap_sort(*c);
+        iter_coap_sort(*c, data);
     }
     if (node->gen) {
-        coap_node_t *children = NULL;
-        size_t n = 0;
-        coap_code_t code = (*node->gen)(node, &ZCOAP_REALLOC, &n, &children);
-        for (size_t i = 0; i < n && !code && children; ++i) {
-            // Populate parent pointers so the generator doesn't have to.
-            children[i].parent = node;
-            iter_coap_sort(&children[i]);
-        }
-        free_dynamic_children(n, children);
+        (*node->gen)(node, &iter_coap_sort, data);
     }
+    return 0;
 }
 
 /**

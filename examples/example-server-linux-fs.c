@@ -103,9 +103,9 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
  * @param children (out) allocated and dynamically populated children of the passed parent
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t __attribute__((nonnull (1, 2, 3, 4))) coap_fs_gen(const coap_node_t *parent, dnode_realloc_t reallocator, size_t * const n, coap_node_t **children)
+coap_code_t __attribute__((nonnull (1, 2, 3, 4))) coap_fs_gen(const coap_node_t * const node, coap_recurse_t recursor, void *recursor_data)
 {
-    if (!parent || !reallocator || !n || !children) {
+    if (!node || !recursor) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     char *path = build_path(parent);
@@ -115,25 +115,14 @@ coap_code_t __attribute__((nonnull (1, 2, 3, 4))) coap_fs_gen(const coap_node_t 
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     struct dirent *dir;
+    coap_code_t rc = 0;
     while ((dir = readdir(d)) != NULL) {
-        ++*n;
-        coap_node_t *resized = (*reallocator)(*children, *n * sizeof(coap_node_t));
-        if (resized == NULL) {
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        coap_node_t child = { .name = dir->d_name, .GET = &coap_fs_get, .gen = &coap_fs_gen };
+        coap_code_t rc;
+        if ((rc = (*recursor)(node, recursor_data))) {
+            break;
         }
-        *children = resized;
-        coap_node_t *child = &(*children)[*n - 1];
-        memset(child, 0, sizeof(*child));
-        size_t filename_len = strlen(dir->d_name);
-        child->dname = (*reallocator)(NULL, filename_len + 1);
-        if (!child->dname) {
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-        }
-        memcpy(child->dname, dir->d_name, filename_len + 1);
-        child->name = child->dname;
-        child->GET = &coap_fs_get;
-        child->gen = &coap_fs_gen;
     }
     closedir(d);
-    return 0;
+    return rc;
 }

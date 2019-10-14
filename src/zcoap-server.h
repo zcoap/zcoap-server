@@ -330,16 +330,11 @@ typedef void __attribute__((nonnull(1))) (*coap_init_t)(const coap_node_t * cons
 typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile void *data);
 
 /**
- * dnode_realloc_t
+ * coap_recruse_t
  *
- * Dynamic URI re-allocator.  Dynamic node generator functions must allocate
- * their output nodes with the passed re-allocator.  The server will free these
- * on behalf of the generators with a symetric free function.
- *
- * @param size number of bytes to allocate
- * @return pointer to allocated memory; NULL on allocation failure; may return NULL if size is 0
+ * Recursor callback interface for depth-first, stack-based tree operations.
  */
-typedef void * (*dnode_realloc_t)(void *ptr, size_t new_size);
+typedef coap_code_t (*coap_recurse_t)(const coap_node_t * const node, void *data);
 
 /**
  * coap_gen_t
@@ -355,11 +350,10 @@ typedef void * (*dnode_realloc_t)(void *ptr, size_t new_size);
  * @param children (out) allocated and dynamically populated children of the passed parent
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-typedef coap_code_t __attribute__((nonnull (1, 2, 3, 4))) (*coap_gen_t)(const coap_node_t * const parent, dnode_realloc_t reallocator, size_t *n, coap_node_t **children);
+typedef coap_code_t __attribute__((nonnull (1, 2, 3, 4))) (*coap_gen_t)(const coap_node_t * const node, coap_recurse_t *recursor);
 
 struct coap_node_s {
     const char *name; // node path segment
-    char *dname; // pointer to dynamic buffer for dynamically-allocated names from generator functions
     volatile void *data; // node data pointer
     const char *fmt; // print format for plain text responses; if NULL, zcoap.c utility GET functions use default format
     const coap_node_t *parent; // pointer to parent node, or NULL for the root node; set by zcoap.c
