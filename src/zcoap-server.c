@@ -508,7 +508,7 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
     const coap_node_t *root = node->parent->parent; // locate root at /.well-known/core/../../
     const href_filter_t href_filter = get_href_filter(nopts, opts);
     size_t wkn_len = snprintf_wellknown_core(NULL, 0, root, &href_filter);
-    char *buf = ZCOAP_MALLOC(wkn_len + 1);
+    char *buf = ZCOAP_ALLOCA(wkn_len + 1);
     if (buf == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
@@ -518,7 +518,7 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
         --wkn_len;
     }
     coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_LINK, wkn_len, buf);
-    ZCOAP_FREE(buf);
+    ZCOAP_ALLOCA_FREE(buf);
 }
 static const coap_node_t core_uri = { .name = "core", .GET = &coap_get_wellknown_core };
 static const coap_node_t *wellknown_children[] = { &core_uri, NULL };
