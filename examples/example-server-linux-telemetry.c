@@ -35,8 +35,7 @@ static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
          ZCOAP_FMT_INT,
          #endif
          ZCOAP_FMT_SENTINEL);
-    srand(0);
-    int temperature = rand();
+    int temperature = rand() % 100;
     max_server_temperature = temperature > max_server_temperature ? temperature : max_server_temperature; // store max
     coap_return_int(req, nopts, opts, NULL, temperature);
 }
@@ -45,6 +44,6 @@ static const coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT 
 static const coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
 static const coap_node_t max_temperature = { .name = "max", .GET = &coap_get_int, .data = &max_server_temperature };
 static const coap_node_t *temperature_children[] = { &max_temperature, NULL };
-static const coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature };
+static const coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature, .children = temperature_children };
 static const coap_node_t *telemetry_children[] = { &temperature, &digits, &name, NULL };
 const coap_node_t telemetry_uri = { .name = "telemetry", .children = telemetry_children };
