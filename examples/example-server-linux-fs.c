@@ -75,7 +75,7 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
         memcpy(&file_contents[total], buf, len);
         total += len;
     }
-    if (ferror)
+    if (ferror(fptr))
     {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     }
@@ -110,6 +110,7 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
     }
     coap_code_t rc = 0;
     char *path = build_path(node);
+    errno = 0;
     DIR *d = opendir(path);
     if (!d) {
         int err = errno;
