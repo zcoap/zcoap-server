@@ -199,7 +199,7 @@ typedef void (*ct_extractor)(ZCOAP_METHOD_SIGNATURE);
  * @param fmt printf format string
  * @param ... printf arguments
  */
-static void SNPRINTF(size_t *total, char **buf, size_t *remain, const char *fmt, ...)
+static void SNPRINTF(size_t *total, char ** const buf, size_t *remain, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -231,7 +231,7 @@ static void SNPRINTF(size_t *total, char **buf, size_t *remain, const char *fmt,
  * @param buf (in/out) buffer pointer to print to and increment
  * @param remain (in/out) remaining bytes in buf; decremented with each printed character
  */
-static void print_ct(const coap_node_t * const node, size_t *len, char **buf, size_t *remain)
+static void print_ct(const coap_node_t * const node, size_t * const len, char ** const buf, size_t * const remain)
 {
     ct_mask_t mask = {{ 0 }};
     if (node->GET) {
@@ -334,7 +334,7 @@ typedef struct iter_wellknown_core_data_s {
     const href_filter_t * const href_filter;
     const bool parent_href_match;
     size_t * const len;
-    char **buf;
+    char ** const buf;
     size_t * const remain;
 } iter_wellknown_core_data_t;
 
@@ -404,7 +404,7 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
  * @param href_filter filter for matching path segments
  * @return number of characters, excluding '\0', that would have been printed had remain been large enough
  */
-static size_t snprintf_wellknown_core(char *buf, size_t remain, const coap_node_t *root, const href_filter_t *href_filter)
+static size_t snprintf_wellknown_core(char *buf, size_t remain, const coap_node_t * const root, const href_filter_t * const href_filter)
 {
     size_t len = 0;
     const iter_wellknown_core_data_t iter_data = {
@@ -428,7 +428,7 @@ static size_t snprintf_wellknown_core(char *buf, size_t remain, const coap_node_
  * @param b option
  * @return 1 if a>b, 0 if a==b, -1 if a<b
  */
-static int opt_cmp(const void *a, const void *b)
+static int opt_cmp(const void * const a, const void * const b)
 {
     const coap_opt_t *opta = a;
     const coap_opt_t *optb = b;
@@ -549,7 +549,7 @@ const coap_node_t wellknown_uri = { .name = ".well-known", .children = wellknown
  * @param b option
  * @return 1 for a>b, 0 for a==b, -1 for a<b
  */
-static int opt_scmp(const void *a, const void *b)
+static int opt_scmp(const void * const a, const void * const b)
 {
     const coap_opt_t *opta = *(const coap_opt_t **)a;
     const coap_opt_t *optb = *(const coap_opt_t **)b;
@@ -572,7 +572,7 @@ static int opt_scmp(const void *a, const void *b)
  * @param opts options to sort
  * @param sorted (out) sorted options
  */
-static void stable_sort_opts(size_t nopts, const coap_opt_t opts[], const coap_opt_t *sorted[])
+static void stable_sort_opts(const size_t nopts, const coap_opt_t opts[], const coap_opt_t *sorted[])
 {
     // STABLE sort; caller must allocate sorted.
     if (nopts == 0) {
@@ -594,7 +594,7 @@ static void stable_sort_opts(size_t nopts, const coap_opt_t opts[], const coap_o
  * @param buf location to stuff option
  * @return buf advanced past the stuffed option
  */
-static coap_code_t *stuff_option(uint32_t *acc, uint16_t optnum, uint16_t optlen, const void *opt, uint8_t *buf)
+static coap_code_t *stuff_option(uint32_t * const acc, uint16_t optnum, uint16_t optlen, const void * const opt, uint8_t *buf)
 {
     uint16_t delta = optnum - *acc;
     *acc += delta;
@@ -664,7 +664,7 @@ static coap_code_t *stuff_options(uint8_t *buf, size_t nopts, const coap_opt_t o
  * @param opts options
  * @return delta-encoded length in bytes
  */
-static size_t opt_sec_len(size_t nopts, const coap_opt_t opts[])
+static size_t opt_sec_len(const size_t nopts, const coap_opt_t opts[])
 {
     // As awkward as it is, we must pre-sort our options in order to determine
     // the length of the CoAP options payload.  Option-number-delta is unsigned,
