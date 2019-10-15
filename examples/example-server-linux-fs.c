@@ -103,12 +103,12 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
  * @param children (out) allocated and dynamically populated children of the passed parent
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t __attribute__((nonnull (1, 2, 3, 4))) coap_fs_gen(const coap_node_t * const node, coap_recurse_t recursor, void *recursor_data)
+coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * const node, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!node || !recursor) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
-    char *path = build_path(parent);
+    char *path = build_path(node);
     DIR *d = opendir(path);
     free(path); // done with this
     if (!d) {

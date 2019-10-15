@@ -80,6 +80,7 @@ enum {
 #define COAP_CODE_MASK_DETAIL ((1U << COAP_CODE_BITS_DETAIL) - 1)
 typedef uint8_t coap_code_t;
 #define COAP_CODE(_class, _detail) ((((_class) & COAP_CODE_MASK_CLASS) << COAP_CODE_BITS_DETAIL) | ((_detail) & COAP_CODE_MASK_DETAIL))
+#define COAP_CODE_TO_CLASS(_code) (((_code) >> COAP_CODE_BITS_CLASS) & COAP_CODE_MASK_CLASS)
 
 enum {
     COAP_OPT_IF_MATCH = 1,
@@ -334,7 +335,7 @@ typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile voi
  *
  * Recursor callback interface for depth-first, stack-based tree operations.
  */
-typedef coap_code_t (*coap_recurse_t)(const coap_node_t * const node, void *data);
+typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(const coap_node_t * const node, const void *data);
 
 /**
  * coap_gen_t
@@ -350,7 +351,7 @@ typedef coap_code_t (*coap_recurse_t)(const coap_node_t * const node, void *data
  * @param children (out) allocated and dynamically populated children of the passed parent
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-typedef coap_code_t __attribute__((nonnull (1, 2, 3, 4))) (*coap_gen_t)(const coap_node_t * const node, coap_recurse_t *recursor);
+typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const node, coap_recurse_t recursor, const void *recursor_data);
 
 struct coap_node_s {
     const char *name; // node path segment
