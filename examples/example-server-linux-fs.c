@@ -114,11 +114,14 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
     if (!d) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
-    struct dirent *dir;
+    struct dirent *entry;
     coap_code_t rc = 0;
-    while ((dir = readdir(d)) != NULL) {
-        coap_node_t child = { .name = dir->d_name, .GET = &coap_fs_get, .gen = &coap_fs_gen };
-        coap_code_t rc;
+    while ((entry = readdir(d)) != NULL) {
+        if (   entry->d_type == DT_DIR
+            && (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))) {
+            continue;
+        }
+        coap_node_t child = { .name = entry->d_name, .GET = &coap_fs_get, .gen = &coap_fs_gen };
         if ((rc = (*recursor)(node, recursor_data))) {
             break;
         }
