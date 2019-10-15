@@ -319,6 +319,16 @@ static void print_ct(const coap_node_t * const node, size_t *len, char **buf, si
     #endif /* ZCOAP_EXTENSIONS */
 }
 
+/**
+ * Data interface for iter_wellknown_core.
+ *
+ * @param pwd present working directory; the path preceding node
+ * @param href_filter filter against which to match as in a .well-known/core?href= filtered query
+ * @param parent_href_match sticky flag to tell us if a parent path segment matched href; if so, we inherit match
+ * @param len (in/out) number of characters that would have been printed had remain been large enough
+ * @param buf (in/out) buffer to print into
+ * @param remain (in/out) number of bytes available in buf
+ */
 typedef struct iter_wellknown_core_data_s {
     const char * const pwd;
     const href_filter_t * const href_filter;
@@ -334,20 +344,15 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, void *dat
  * Recursive URI tree iterator for performing a depth-first walk of the URI tree
  * and dumping an RFC6690-compliant .well-known/core response.
  *
- * @param pwd present working directory; the path preceding node
- * @param node current iteration root node
- * @param href_filter filter against which to match as in a .well-known/core?href= filtered query
- * @param parent_href_match sticky flag to tell us if a parent path segment matched href; if so, we inherit match
- * @param len (out) number of characters that would have been printed had remain been large enough
- * @param buf buffer to print into
- * @param remain number of bytes available in buf
+ * @param node present node in the tree from which to proceed with the recursive dump
+ * @data iter_wellknown_core_data_t
  */
 static coap_code_t iter_wellknown_core(const coap_node_t * const node, const void *data)
 {
-    iter_wellknown_core_data_t * const pdata = (iter_wellknown_core_data_t *)data;
+    const iter_wellknown_core_data_t * const pdata = (iter_wellknown_core_data_t *)data;
     bool match = pdata->parent_href_match; // always inherit parent match
     do {
-        if (name->name == NULL) {
+        if (node->name == NULL) {
             break; // suppress output of unnamed elements
         } else if (pdata->href_filter->str) {
             match = match || href_match(node->name, pdata->href_filter);
@@ -364,7 +369,7 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
         SNPRINTF(len, buf, remain, ",");
     } while (0);
     const size_t pwdlen = strlen(pwd);
-    const size_t cplen = strlen(node->name);
+    const size_t cplen = node->name ? strlen(node->name) : 0;
     char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
     ZCOAP_MEMCPY(cpbuf, pwd, pwdlen);
     ZCOAP_MEMCPY(cpbuf + pwdlen, node->name, cplen);
@@ -380,18 +385,18 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
     };
     if (node->children) {
         for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
-            iter_coap_tree(*c, &cdata);
+            iter_wellknown_core(*c, &cdata);
         }
     }
     if (node->gen) {
-        (*node->gen)(node, &cdata);
+        (*node->gen)(node, &iter_wellknown_core, &cdata);
     }
     return 0;
 }
 
 /**
- * Recursively call iter_coap_tree for the depth-first URI path dump of
- * .well-known/core
+ * Recursively call iter_wellknown_core for an RFC-6690-compliant dump of our
+ * URI tree.  That is, produce /.well-known/core per RFC-6690.
  *
  * @param buf buf to print into
  * @param number of bytes available in buf
@@ -401,10 +406,8 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
  */
 static size_t snprintf_coap_tree(char *buf, size_t remain, const coap_node_t *root, const href_filter_t *href_filter)
 {
-    char *root_pwd = "/";
-    size_t len = 0;
     const iter_wellknown_core_data_t iter_data = {
-        .pwd = "/";
+        .pwd = "";
         .href_filter = href_filter,
         .parent_href_match = false,
         .len = 0;
@@ -1204,7 +1207,7 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing GET for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL);
-                        return 0;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: GET method unsupported for path '%s'\n", __func__, node->name);
@@ -1218,7 +1221,7 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing PUT for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL);
-                        return 0;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: PUT method unsupported for path '%s'\n", __func__, node->name);
@@ -1232,7 +1235,7 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing POST for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL);
-                        return 0;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: POST method unsupported for path '%s'\n", __func__, node->name);
@@ -1246,7 +1249,7 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing DELETE for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->DELETE)(node, req, nopts, opts, ct, len, payload, NULL);
-                        return 0;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: DELETE method unsupported for path '%s'\n", __func__, node->name);
@@ -1308,9 +1311,17 @@ static size_t coap_count_children(const coap_node_t * const node)
     return count;
 }
 
-// Forward declaration.
-static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req_uri(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], size_t npath_opts, const coap_msg_opt_t *path_opts, const coap_node_t * const path);
+static coap_code_t __attribute__((nonnull (1, 3, 5, 6))) iter_req(const coap_node_t * const node, const void *data); // Forward declaration.
 
+/**
+ * Data interface for iter_req.
+ *
+ * @param req CoAP request to handle
+ * @param nopts number of options enclosed in req
+ * @param opts array of option pointers into req
+ * @param npath_opts number of path options enclosed in req
+ * @param path_opts array of path option pointers into req
+ */
 typedef struct iter_req_data_s {
     coap_req_data_t * const req;
     const size_t nopts;
@@ -1319,35 +1330,33 @@ typedef struct iter_req_data_s {
     const coap_msg_opt_t *path_opts;
 } iter_req_data_t;
 
-typedef union iter_data_u {
-    iter_req_data_t iter_req_data;
-} iter_data_t;
 
 /**
  * Iterate through the tree starting at path to find a match
  * to the path as defined by the passed path_opts array.
  *
- * @param req CoAP request to handle
- * @param nopts number of options enclosed in req
- * @param opts array of option pointers into req
- * @param npath_opts number of path options enclosed in req
- * @param path_opts array of path option pointers into req
- * @param path node defining the top of a tree against which request path should be matched
+ * @param node current tree node for our depth-first tree walk
+ * @param data iter_req_data_t
  */
-static coap_code_t iter_req(coap_node_t * const node, iter_data_t idata)
+static coap_code_t iter_req(coap_node_t * const node, const void *data)
 {
-    iter_req_data_t *req_data = *idata.iter_req_data;
-    if (   !req_data->npath_opts
-        || strncmp(req_data->path_opts->val, node->name, req_data->path_opts->len)
-        || strlen(node->name) != req_data->path_opts.len) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
+    const iter_req_data_t *pdata = (const iter_req_data_t *)data;
+    if (   !pdata->npath_opts
+        || strncmp(pdata->path_opts->val, node->name, pdata->path_opts->len)
+        || strlen(node->name) != pdata->path_opts.len) {
+        return 0;
     }
-    --req_data->npath_opts;
-    ++req_data->path_opts;
-    if (!req_data->npath_opts) {
-        process_req_uri(req, nopts, opts, &node);
+    iter_req_data_t cdata = {
+        .req = pdata->req,
+        .nopts = pdata->nopts,
+        .opts = pdata->opts,
+        npath_opts = --pdata->npath_opts,
+        path_opts = ++pdata->path_opts,
+    };
+    if (!cdata->npath_opts) { // Ding ding!  No more path options!  Match!
+        return process_req_uri(req, nopts, opts, &node);
     }
-    size_t count = coap_count_children(node);
+    const size_t count = coap_count_children(node);
     const coap_msg_opt_t *opt = &path_opts[0];
     if (count && opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
         char keyname[opt->len + 1];
@@ -1357,44 +1366,16 @@ static coap_code_t iter_req(coap_node_t * const node, iter_data_t idata)
         const coap_node_t *keyptr = &bsearchkey;
         const coap_node_t **c = bsearch(&keyptr, path->children, count, sizeof(path->children[0]), coap_node_cmp);
         if (c) {
-            coap_node_t node;
-            ZCOAP_MEMCPY(&node, *c, sizeof(node));
-            node.parent = path;
-            --npath_opts;
-            if (!npath_opts) { // end of options
-                return process_req_uri(req, nopts, opts, &node);
-            } else { // continue searching; we have more path segments to compare
-                ++path_opts;
-                return iter_req_uri(req, nopts, opts, npath_opts, path_opts, &node);
-            }
+            return iter_req(*c, &cdata);
         }
     }
     if (path->gen) {
-        coap_node_t *children = NULL;
-        size_t n = 0;
-        coap_code_t code = (*path->gen)(path, &ZCOAP_REALLOC, &n, &children);
-        for (size_t i = 0; i < n && !code && children; ++i) {
-            // Populate parent pointers so the generator doesn't have to.
-            children[i].parent = path;
-            if (   !strncmp((char *)opt->val, children[i].name, opt->len)
-                && strlen(children[i].name) == opt->len) {
-                --npath_opts;
-                if (!npath_opts) { // end of options
-                    code = process_req_uri(req, nopts, opts, &children[i]);
-                    break;
-                } else { // continue searching; we have more path segments to compare
-                    ++path_opts;
-                    code = iter_req_uri(req, nopts, opts, npath_opts, path_opts, &children[i]);
-                    break;
-                }
-            }
-        }
-        free_dynamic_children(n, children);
+        coap_code_t code = (*path->gen)(node, &iter_req, &cdata);
         if (code) {
             return code;
         }
     }
-    if (path && path->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
+    if (node && node->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
         return process_req_uri(req, nopts, opts, path);
     }
     // If we ever get here, it means the client specified a path
