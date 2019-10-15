@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "example-server-linux-fs.h"
@@ -12,18 +13,17 @@
  */
 static char *build_path(const coap_node_t *node)
 {
-    size_t path_len = 1 /* leading solidus ('/') */ + 1 /* null-terminating '\0' */;
+    size_t path_len = 1 /* null-terminating '\0' */;
     path_len += node->name ? strlen(node->name) : 0;
     char *path = malloc(path_len);
     if (path == NULL) {
         return NULL;
     }
-    path[0] = '/';
-    memcpy(&path[1], node->name, path_len - 2);
+    memcpy(&path[0], node->name, path_len - 1);
     path[path_len - 1] = '\0'; /* must null-terminate */
     const coap_node_t *cur = node->parent;
     while (cur) {
-        size_t segment_len = 1 /* leading solidus ('/') */;
+        size_t segment_len = 1 /* trailing solidus ('/') */;
         segment_len += cur->name ? strlen(cur->name) : 0;
         char *resized = realloc(path, path_len + segment_len);
         if (resized == NULL) {
@@ -32,8 +32,8 @@ static char *build_path(const coap_node_t *node)
         }
         path = resized;
         memmove(path + segment_len, path, path_len);
-        path[0] = '/';
-        memcpy(&path[1], cur->name, segment_len - 1);
+        memcpy(&path[0], cur->name, segment_len - 1);
+        path[segment_len - 1] = '/';
         path_len += segment_len;
         cur = cur->parent;
     }
@@ -108,24 +108,30 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
     if (!node || !recursor) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
+    coap_code_t rc = 0;
     char *path = build_path(node);
     DIR *d = opendir(path);
-    free(path); // done with this
     if (!d) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        int err = errno;
+        if (err && err != ENOTDIR && err != EACCES) {
+            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, errno, strerror(errno));
+            rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        goto coap_fs_gen_out;
     }
+    free(path); // done with this
     struct dirent *entry;
-    coap_code_t rc = 0;
     while ((entry = readdir(d)) != NULL) {
         if (   entry->d_type == DT_DIR
             && (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))) {
             continue;
         }
         coap_node_t child = { .name = entry->d_name, .parent = node, .GET = &coap_fs_get, .gen = &coap_fs_gen };
-        if ((rc = (*recursor)(node, recursor_data))) {
-            break;
+        if ((rc = (*recursor)(&child, recursor_data))) {
+            goto coap_fs_gen_out;
         }
     }
+    coap_fs_gen_out:
     closedir(d);
     return rc;
 }

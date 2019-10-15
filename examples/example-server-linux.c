@@ -17,14 +17,10 @@
 //
 // /tmp
 // /sys/power
-// /sys/class/thermal
 
 static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen };
 static const coap_node_t power_uri = { .name = "power", .gen = &coap_fs_gen };
-static const coap_node_t thermal_uri = { .name = "thermal", .gen = &coap_fs_gen };
-static const coap_node_t *class_children[] = { &thermal_uri, NULL };
-static const coap_node_t class_uri = { .name = "class", .children = class_children };
-static const coap_node_t *sys_children[] = { &power_uri, &class_uri, NULL };
+static const coap_node_t *sys_children[] = { &power_uri, NULL };
 static const coap_node_t sys_uri = { "sys", .children = sys_children };
 static const coap_node_t *root_children[] = { &wellknown_uri, &tmp_uri, &sys_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };

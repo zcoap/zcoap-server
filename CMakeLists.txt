@@ -10,6 +10,8 @@ message(STATUS "\r\n********************************************\r\n-- zcoap-ser
 message(STATUS "TOOLCHAIN = ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" "-Werror -Wshadow")
+
 add_library(zcoap-server
             src/config.h
             src/platform.h

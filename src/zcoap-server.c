@@ -385,7 +385,9 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
     };
     if (node->children) {
         for (const coap_node_t * const *c = node->children; *c != NULL; ++c) {
-            iter_wellknown_core(*c, &cdata);
+            coap_node_t child = *(*c);
+            child.parent = node;
+            iter_wellknown_core(&child, &cdata);
         }
     }
     if (node->gen) {
@@ -1335,6 +1337,58 @@ typedef struct iter_req_data_s {
 
 
 /**
+ * Wrapped CoAP request iterator that always presumes match between node->name
+ * and the immediately previous path_opt.  Can be called against root node
+ * which is always a match.
+ *
+ * @param node current tree node for our depth-first tree walk
+ * @param data iter_req_data_t
+ * @return 0.00 if caller should keep iterating, non-zero if not; inject_coap_req will issue coap_status_rsp for non-2.00-class success codes
+ */
+static coap_code_t __attribute__((nonnull (1, 2))) _iter_req(const coap_node_t * const node, const void *data)
+{
+    const iter_req_data_t *cdata = (const iter_req_data_t *)data;
+    if (!cdata->npath_opts) { // Ding ding!  No more path options!  Match!
+        return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node);
+    }
+    const size_t count = coap_count_children(node);
+    const coap_msg_opt_t *opt = &cdata->path_opts[0];
+    if (count && opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
+        char keyname[opt->len + 1];
+        ZCOAP_MEMCPY(keyname, opt->val, opt->len);
+        keyname[opt->len] = '\0';
+        const coap_node_t bsearchkey = { .name = keyname };
+        const coap_node_t *keyptr = &bsearchkey;
+        const coap_node_t **c = bsearch(&keyptr, node->children, count, sizeof(node->children[0]), coap_node_cmp);
+        if (c) {
+            coap_node_t child = *(*c);
+            child.parent = node;
+            return iter_req(&child, cdata);
+        }
+    }
+    if (node->gen) {
+        coap_code_t code = (*node->gen)(node, &iter_req, cdata);
+        if (code) {
+            return code;
+        }
+    }
+    if (node && node->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
+        return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node);
+    }
+    #ifdef ZCOAP_DEBUG
+    {
+        char buf[opt->len + 1];
+        ZCOAP_MEMCPY(buf, opt->val, opt->len);
+        buf[opt->len] = '\0';
+        ZCOAP_DEBUG("%s: unable to resolve request path '%s'!\n", __func__, buf);
+    }
+    #endif
+    // If we ever get here, it means the client specified a path
+    // segment that we were unable to resolve.  Hence, 404.
+    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
+}
+
+/**
  * CoAP request iterator:
  *
  *   * Compare node->name to the current path option.
@@ -1361,53 +1415,19 @@ static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * 
 {
     const iter_req_data_t *pdata = (const iter_req_data_t *)data;
     if (   !pdata->npath_opts
+        || !node->name /* impossible for null-name to be a match */
         || strncmp(pdata->path_opts->val, node->name, pdata->path_opts->len)
         || strlen(node->name) != pdata->path_opts->len) {
         return 0;
     }
-    iter_req_data_t cdata = {
+    const iter_req_data_t cdata = {
         .req = pdata->req,
         .nopts = pdata->nopts,
         .opts = pdata->opts,
         .npath_opts = pdata->npath_opts - 1,
         .path_opts = pdata->path_opts + 1,
     };
-    if (!cdata.npath_opts) { // Ding ding!  No more path options!  Match!
-        return process_req_uri(cdata.req, cdata.nopts, cdata.opts, node);
-    }
-    const size_t count = coap_count_children(node);
-    const coap_msg_opt_t *opt = &cdata.path_opts[0];
-    if (count && opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
-        char keyname[opt->len + 1];
-        ZCOAP_MEMCPY(keyname, opt->val, opt->len);
-        keyname[opt->len] = '\0';
-        const coap_node_t bsearchkey = { .name = keyname };
-        const coap_node_t *keyptr = &bsearchkey;
-        const coap_node_t **c = bsearch(&keyptr, node->children, count, sizeof(node->children[0]), coap_node_cmp);
-        if (c) {
-            return iter_req(*c, &cdata);
-        }
-    }
-    if (node->gen) {
-        coap_code_t code = (*node->gen)(node, &iter_req, &cdata);
-        if (code) {
-            return code;
-        }
-    }
-    if (node && node->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
-        return process_req_uri(cdata.req, cdata.nopts, cdata.opts, node);
-    }
-    #ifdef ZCOAP_DEBUG
-    {
-        char buf[opt->len + 1];
-        ZCOAP_MEMCPY(buf, opt->val, opt->len);
-        buf[opt->len] = '\0';
-        ZCOAP_DEBUG("%s: unable to resolve request path '%s'!\n", __func__, buf);
-    }
-    #endif
-    // If we ever get here, it means the client specified a path
-    // segment that we were unable to resolve.  Hence, 404.
-    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
+    _iter_req(node, &cdata);
 }
 
 /**
@@ -1420,19 +1440,12 @@ static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * 
 static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * const req, const coap_node_t * const root)
 {
     size_t nopts;
+    size_t npath_opts = 0;
+    coap_msg_opt_t *first_path_opt = NULL;
     coap_code_t rc;
     // Count options.
     if ((rc = coap_count_opts(req, &nopts))) {
         coap_status_rsp(req, rc);
-        return;
-    }
-    // No options means no path, which implies match to the root node.
-    // We have this check here because bsearch can choke on an empty array.
-    if (nopts == 0) {
-        rc = process_req_uri(req, nopts, NULL, root);
-        if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
-            coap_status_rsp(req, rc);
-        }
         return;
     }
     // Parse options array.
@@ -1441,43 +1454,42 @@ static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * co
         coap_status_rsp(req, rc);
         return;
     }
-    // Find *an* occurrence of a path option (perhaps not the first).
-    const coap_msg_opt_t key = { .num = COAP_OPT_PATH };
-    coap_msg_opt_t *a_path_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
-    if (a_path_opt == NULL) {
-        // Again, no path implies match to the root node.
-        rc = process_req_uri(req, nopts, opts, root);
-        if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
-            coap_status_rsp(req, rc);
+    // Parse for path options.
+    while (nopts) {
+        // Find *an* occurrence of a path option (perhaps not the first).
+        const coap_msg_opt_t key = { .num = COAP_OPT_PATH };
+        coap_msg_opt_t *a_path_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (a_path_opt == NULL) {
+            break; // no path options
         }
-        return;
-    }
-    // Now find the *first* occurrence of a path option.
-    coap_msg_opt_t *first_path_opt;
-    for (coap_msg_opt_t *opt = a_path_opt; ; --opt) {
-        if (opt->num != COAP_OPT_PATH) {
-            first_path_opt = opt + 1;
-            break;
+        // Now find the *first* occurrence of a path option.
+        for (coap_msg_opt_t *opt = a_path_opt; ; --opt) {
+            if (opt->num != COAP_OPT_PATH) {
+                first_path_opt = opt + 1;
+                break;
+            }
+            if (opt == opts) {
+                first_path_opt = opt;
+                break;
+            }
         }
-        if (opt == opts) {
-            first_path_opt = opt;
-            break;
+        coap_msg_opt_t *end = opts + nopts;
+        npath_opts = 0;
+        for (coap_msg_opt_t *opt = first_path_opt; opt < end && opt->num == COAP_OPT_PATH; ++opt) {
+            ++npath_opts;
         }
+        break;
     }
-    coap_msg_opt_t *end = opts + nopts;
-    size_t npath_opts = 0;
-    for (coap_msg_opt_t *opt = first_path_opt; opt < end && opt->num == COAP_OPT_PATH; ++opt) {
-        ++npath_opts;
-    }
+    // Dispatch.
     {
         const iter_req_data_t iter_data = {
             .req = req,
             .nopts = nopts,
-            .opts = opts,
+            .opts = nopts ? opts : NULL,
             .npath_opts = npath_opts,
             .path_opts = first_path_opt,
         };
-        rc = iter_req(root, &iter_data);
+        rc = _iter_req(root, &iter_data);
         if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
             coap_status_rsp(req, rc);
         }
@@ -1571,7 +1583,9 @@ static coap_code_t iter_coap_sort(const coap_node_t * const node, const void *da
     }
     coap_sort_children(node);
     for (const coap_node_t * const *c = node->children; c != NULL && *c != NULL; ++c) {
-        iter_coap_sort(*c, data);
+        coap_node_t child = *(*c);
+        child.parent = node;
+        iter_coap_sort(&child, data);
     }
     if (node->gen) {
         (*node->gen)(node, &iter_coap_sort, data);
