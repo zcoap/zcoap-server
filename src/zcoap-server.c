@@ -1181,7 +1181,9 @@ coap_code_t __attribute__((nonnull (1, 2, 3))) coap_get_payload(coap_req_data_t 
 
 /**
  * Process a CoAP request and dispatch to the appropriate handler based upon
- * message class and request method.
+ * message class and request method.  On success, return code 2.00, a CoAP
+ * 'success-class' response code.  On error, return an appropriate error
+ * code.
  *
  * @param req CoAP request to process
  * @param nopts number of options in the request
@@ -1198,7 +1200,6 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
     coap_ct_t ct;
     size_t len;
     const void *payload;
-    coap_code_t rc;
     switch (req->msg->code.code_class) {
         case COAP_REQ:
             switch (req->msg->code.code_detail) {
@@ -1209,15 +1210,12 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing GET for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL);
-                        rc = COAP_CODE(COAP_SUCCESS, 0);
-                        break;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: GET method unsupported for path '%s'\n", __func__, node->name);
                         #endif
-                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-                        coap_status_rsp(req, rc);
-                        break;
+                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
                 case COAP_REQ_METHOD_PUT:
                     if (node->PUT) {
@@ -1226,15 +1224,12 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing PUT for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL);
-                        rc = COAP_CODE(COAP_SUCCESS, 0);
-                        break;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: PUT method unsupported for path '%s'\n", __func__, node->name);
                         #endif
-                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-                        coap_status_rsp(req, rc);
-                        break;
+                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
                 case COAP_REQ_METHOD_POST:
                     if (node->POST) {
@@ -1243,15 +1238,12 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing POST for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL);
-                        rc = COAP_CODE(COAP_SUCCESS, 0);
-                        break;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: POST method unsupported for path '%s'\n", __func__, node->name);
                         #endif
-                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-                        coap_status_rsp(req, rc);
-                        break;
+                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
                 case COAP_REQ_METHOD_DELETE:
                     if (node->DELETE) {
@@ -1260,33 +1252,25 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
                         ZCOAP_DEBUG("%s: servicing DELETE for path '%s'\n", __func__, node->name);
                         #endif
                         (*node->DELETE)(node, req, nopts, opts, ct, len, payload, NULL);
-                        rc = COAP_CODE(COAP_SUCCESS, 0);
-                        break;
+                        return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         #ifdef ZCOAP_DEBUG
                         ZCOAP_DEBUG("%s: DELETE method unsupported for path '%s'\n", __func__, node->name);
                         #endif
-                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-                        coap_status_rsp(req, rc);
-                        break;
+                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
                 default:
                     #ifdef ZCOAP_DEBUG
                     ZCOAP_DEBUG("%s: unable to service method %u for path '%s'\n", __func__, req->msg->code.code_detail, node->name);
                     #endif
-                    rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-                    coap_status_rsp(req, rc);
-                    break;
+                    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
             }
         default:
             #ifdef ZCOAP_DEBUG
             ZCOAP_DEBUG("%s: ignoring message with class %u and path option '%s'\n", __func__, req->msg->code.code_class, node->name);
             #endif
-            rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-            coap_status_rsp(req, rc);
-            break;
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
-    return rc;
 }
 
 /**
@@ -1351,11 +1335,27 @@ typedef struct iter_req_data_s {
 
 
 /**
- * Iterate through the tree starting at path to find a match
- * to the path as defined by the passed path_opts array.
+ * CoAP request iterator:
+ *
+ *   * Compare node->name to the current path option.
+ *   * On miss, return 0.
+ *   * Else, on last path option, we match!  Dispatch to the server and return!
+ *   * Else,  besearch for a child match.
+ *   * On child-match, recurse to the child and return.
+ *   * Else, if there is a dynamic-child-node generator, recuse to the generator.
+ *   * Else return 4.04, not found.
+ *
+ * Return codes should be interpreted as follows:
+ *
+ *   * 0.00: no match and no error - caller should keep iterating
+ *   * 2.00: match and successful dispatch - caller should cease iterating
+ *   * 4.XX or 5.XX: error - caller should cease iterating and return the error to the top level
+ *
+ * At the top level, 4.XX and 5.XX codes should evoke a corresponding client response.
  *
  * @param node current tree node for our depth-first tree walk
  * @param data iter_req_data_t
+ * @return 0.00 if caller should keep iterating, non-zero if not; inject_coap_req will issue coap_status_rsp for non-2.00-class success codes
  */
 static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * const node, const void *data)
 {
@@ -1407,9 +1407,7 @@ static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * 
     #endif
     // If we ever get here, it means the client specified a path
     // segment that we were unable to resolve.  Hence, 404.
-    coap_code_t rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
-    coap_status_rsp(cdata.req, rc);
-    return rc;
+    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NOT_FOUND);
 }
 
 /**
@@ -1431,7 +1429,10 @@ static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * co
     // No options means no path, which implies match to the root node.
     // We have this check here because bsearch can choke on an empty array.
     if (nopts == 0) {
-        process_req_uri(req, nopts, NULL, root);
+        rc = process_req_uri(req, nopts, NULL, root);
+        if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
+            coap_status_rsp(req, rc);
+        }
         return;
     }
     // Parse options array.
@@ -1445,7 +1446,10 @@ static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * co
     coap_msg_opt_t *a_path_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
     if (a_path_opt == NULL) {
         // Again, no path implies match to the root node.
-        process_req_uri(req, nopts, opts, root);
+        rc = process_req_uri(req, nopts, opts, root);
+        if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
+            coap_status_rsp(req, rc);
+        }
         return;
     }
     // Now find the *first* occurrence of a path option.
@@ -1473,7 +1477,10 @@ static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * co
             .npath_opts = npath_opts,
             .path_opts = first_path_opt,
         };
-        iter_req(root, &iter_data);
+        rc = iter_req(root, &iter_data);
+        if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
+            coap_status_rsp(req, rc);
+        }
     }
 }
 
