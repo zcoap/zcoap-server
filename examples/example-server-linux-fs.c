@@ -121,7 +121,7 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
             && (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))) {
             continue;
         }
-        coap_node_t child = { .name = entry->d_name, .GET = &coap_fs_get, .gen = &coap_fs_gen };
+        coap_node_t child = { .name = entry->d_name, .parent = node, .GET = &coap_fs_get, .gen = &coap_fs_gen };
         if ((rc = (*recursor)(node, recursor_data))) {
             break;
         }
