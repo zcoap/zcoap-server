@@ -344,13 +344,12 @@ typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(const coap
  * with the caller-passed allocator.  The caller then becomes responsible for
  * freeing children with a symetric free function.
  *
- * @param parent parent node under which to dynamically generate child nodes
- * @param allocator allocator for output child nodes.
- * @param n (out) number of children generated
- * @param children (out) allocated and dynamically populated children of the passed parent
+ * @param parent node under which to dynamically generate child nodes
+ * @param recursor recursive callback to which dynamically-created children should be passed
+ * @param recursor_data data to pass to the recursive callback function
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const node, coap_recurse_t recursor, const void *recursor_data);
+typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data);
 
 struct coap_node_s {
     const char *name; // node path segment

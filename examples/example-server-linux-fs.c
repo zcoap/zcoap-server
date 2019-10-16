@@ -5,65 +5,15 @@
 #include "example-server-linux-fs.h"
 
 /**
- * Build a solidus-delimited path string from node through its parents all the
- * way to the mount point.  We identify the mount point as the first node in our
- * parental lineage where metadata is non-null.  node->metadata stores the mount
- * point.  With this, we can reconstruct the full filesystem path as
- *
- * @param node starting tree-node from which to build the path
- * @return an allocated and null-terminated string containing the solidus-delimited path from the tree root to node; on error, returns NULL
- */
-static char *build_path(const coap_node_t *node)
-{
-    size_t path_len = 1 /* null-terminating '\0' */;
-    char *path = calloc(path_len, sizeof(char));
-    if (path == NULL) {
-        return NULL;
-    }
-    const coap_node_t *cur = node;
-    while (cur && !cur->metadata) {
-        size_t segment_len = 1 /* solidus prefix ('/') */;
-        segment_len += cur->name ? strlen(cur->name) : 0;
-        char *resized = realloc(path, path_len + segment_len);
-        if (resized == NULL) {
-            free(path);
-            return NULL;
-        }
-        path = resized;
-        memmove(path + segment_len, path, path_len);
-        path[0] = '/';
-        memcpy(&path[1], cur->name, segment_len - 1);
-        path_len += segment_len;
-        cur = cur->parent;
-    }
-    // Now prepend node->metadata, which has our mount point.
-    if (!cur || !cur->metadata) {
-        free(path);
-        return NULL;
-    }
-    const char *mnt = cur->metadata;
-    size_t mnt_len = strlen(mnt);
-    char *resized = realloc(path, path_len + mnt_len);
-    if (resized == NULL) {
-        free(path);
-        return NULL;
-    }
-    path = resized;
-    memmove(path + mnt_len, path, path_len);
-    memcpy(path, mnt, mnt_len);
-    return path;
-}
-
-/**
  * GET handler for dynamically-generated children of coap_fs_gen mount points.
  * Return the contents of the specified file to the client.
  */
-static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
+void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
-    char *path = build_path(node);
+    const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
+        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -77,7 +27,7 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
             ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
-        goto coap_fs_get_out;
+        return;
     }
     char buf[4096];
     char *file_contents = NULL;
@@ -100,9 +50,6 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
         coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_STREAM, total, file_contents);
     }
     coap_fs_get_out:
-    if (path) {
-        free(path);
-    }
     if (fptr) {
         fclose(fptr);
     }
@@ -115,12 +62,12 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
  * PUT handler for dynamically-generated children of coap_fs_gen mount points.
  * Return the contents of the specified file to the client.
  */
-static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
+void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
-    char *path = build_path(node);
+    const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
+        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -134,7 +81,7 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
             ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
-        goto coap_fs_put_out;
+        return;
     }
     fwrite(payload, 1, len, fptr);
     if (ferror(fptr)) {
@@ -142,10 +89,6 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
-    }
-    coap_fs_put_out:
-    if (path) {
-        free(path);
     }
     if (fptr) {
         fclose(fptr);
@@ -156,12 +99,12 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
  * DELETE handler for dynamically-generated children of coap_fs_gen mount points.
  * Return the contents of the specified file to the client.
  */
-static void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
+void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
-    char *path = build_path(node);
+    const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
+        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -177,35 +120,50 @@ static void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
     } else {
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DELETE));
     }
-    if (path) {
-        free(path);
-    }
 }
 
 /**
  * Magical dynamic child-node generator for filesystem reflection.  Dynamically
- * construct a tree of inodes at and below the path pointed to by node->metadata.
- * Each child recursively references coap_fs_gen.  Thus, we can mount and
- * reflect any filesytsem node at any node in our CoAP URI tree.
+ * construct a tree of inodes at and below the path pointed to by a static
+ * originator node's node->metadata.  Each child recursively references
+ * coap_fs_gen.  Thus, we can mount and reflect any filesytsem node at any node
+ * in our CoAP URI tree.
  *
- * @param node parent node under which to dynamically generate child nodes
+ * Mount point is defined by ->metadata at a static originator parent node in
+ * our lineage where coap_fs_gen is first referenced.  Child nodes append their
+ * directory or file name to the path and store in their own ->metadata such
+ * that methods called against child nodes have immediate access to the fully
+ * qualified filesystem path.  Child nodes are also constructed with .gen =
+ * &coap_fs_gen.  In this way, dynamic tree construction is recursive and will
+ * reflect the entire inode tree at and below the mount point.
+ *
+ * Methods are inherited from the static origniator parent node.  This means
+ * that the static parent node originator of the tree defines permissions,
+ * which may include any of GET, PUT or DELETE.  We presume that static
+ * originating parent nodes will reference our coap_fs_get, coap_fs_put and
+ * coap_fs_delete helper methods defined here.  But other methods may also be
+ * used.  As called methods are passed a node with node->metadata containing
+ * the full filesystem path, any custom method may execute any desired
+ * operation against the supplied filesystem path.
+ *
+ * @param parent node under which to dynamically generate child nodes
  * @param recursor recursive callback to which dynamically-created children should be passed
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * const node, coap_recurse_t recursor, const void *recursor_data)
+coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
 {
-    if (!node || !recursor || !node->metadata) {
+    if (!parent || !recursor || !parent->metadata) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     coap_code_t rc = 0;
-    const char *mnt = node->metadata;
+    const char *parent_path = parent->metadata;
     errno = 0;
-    DIR *d = opendir(mnt);
+    DIR *d = opendir(parent_path);
     if (!d) {
         int err = errno;
         if (err && err != ENOTDIR && err != EACCES) {
-            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, mnt, err, strerror(err));
+            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, parent_path, err, strerror(err));
             rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
         goto coap_fs_gen_out;
@@ -216,7 +174,15 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
             && (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))) {
             continue;
         }
-        coap_node_t child = { .name = entry->d_name, .parent = node, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .gen = &coap_fs_gen };
+        const size_t parent_path_len = strlen(parent_path);
+        const size_t entry_len = strlen(entry->d_name);
+        const size_t child_path_len = parent_path_len + 1 /* solidus */ + entry_len;
+        char child_path[child_path_len + 1 /* '\0' */];
+        memcpy(child_path, parent_path, parent_path_len);
+        child_path[parent_path_len] = '/';
+        memcpy(&child_path[parent_path_len + 1], entry->d_name, entry_len);
+        child_path[child_path_len] = '\0';
+        coap_node_t child = { .name = entry->d_name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DELETE = parent->DELETE, .gen = &coap_fs_gen, .metadata = child_path };
         if ((rc = (*recursor)(&child, recursor_data))) {
             goto coap_fs_gen_out;
         }

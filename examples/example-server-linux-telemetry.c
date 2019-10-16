@@ -46,6 +46,6 @@ static const coap_node_t *temperature_children[] = { &max_temperature, NULL };
 static const coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature, .children = temperature_children };
 static const coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT = &coap_put_server_name, .data = &server_name };
 static const coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
-static const coap_node_t power = { .name = "power", .gen = &coap_fs_gen, .metadata = "/sys/power" };
+static const coap_node_t power = { .name = "power", .gen = &coap_fs_gen, .GET = &coap_fs_get, .metadata = "/sys/power" };
 static const coap_node_t *telemetry_children[] = { &temperature, &digits, &name, &power, NULL };
 const coap_node_t telemetry_uri = { .name = "telemetry", .children = telemetry_children };
