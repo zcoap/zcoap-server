@@ -1,6 +1,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "example-server-linux-fs.h"
 #include "example-server-linux-telemetry.h"
 
 static int server_digits = 8675309;
@@ -40,10 +41,11 @@ static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
     coap_return_int(req, nopts, opts, NULL, temperature);
 }
 
-static const coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT = &coap_put_server_name, .data = &server_name };
-static const coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
 static const coap_node_t max_temperature = { .name = "max", .GET = &coap_get_int, .data = &max_server_temperature };
 static const coap_node_t *temperature_children[] = { &max_temperature, NULL };
 static const coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature, .children = temperature_children };
-static const coap_node_t *telemetry_children[] = { &temperature, &digits, &name, NULL };
+static const coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT = &coap_put_server_name, .data = &server_name };
+static const coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
+static const coap_node_t power = { .name = "power", .gen = &coap_fs_gen, .metadata = "/sys/power" };
+static const coap_node_t *telemetry_children[] = { &temperature, &digits, &name, &power, NULL };
 const coap_node_t telemetry_uri = { .name = "telemetry", .children = telemetry_children };

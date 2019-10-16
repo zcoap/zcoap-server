@@ -324,7 +324,6 @@ typedef struct coap_msg_opt_s {
     const void *val;
 } coap_msg_opt_t;
 
-typedef unsigned coap_meta_t;
 typedef struct coap_node_s coap_node_t; // forward declaration
 typedef void __attribute__((nonnull (1, 2))) (*coap_handler_t)(ZCOAP_METHOD_SIGNATURE);
 typedef void __attribute__((nonnull(1))) (*coap_init_t)(const coap_node_t * const node);
@@ -360,13 +359,13 @@ struct coap_node_s {
     const coap_node_t *parent; // pointer to parent node, or NULL for the root node; set by zcoap.c
     const coap_node_t **children; // must be NULL or point to a NULL-terminated array of child noes
     coap_gen_t gen; // must be NULL or point to a child-node generator
-    coap_handler_t GET;
-    coap_handler_t PUT;
-    coap_handler_t POST;
-    coap_handler_t DELETE;
+    coap_handler_t GET; // GET method pointer; must be NULL or point to a valid zcoap GET method handler
+    coap_handler_t PUT; // PUT method pointer; must be NULL or point to a valid zcoap GET method handler
+    coap_handler_t POST; // POST method pointer; must be NULL or point to a valid zcoap GET method handler
+    coap_handler_t DELETE; // DELETE method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_init_t init; // init function to call against the node at system init; called by zcoap.c at init if non-null
     coap_validate_t validate; // utility validator for init and PUT/POST; called by zcoap.c PUT/POST utility methods if non-null
-    coap_meta_t metadata; // node metadata
+    const void *metadata; // node metadata; can be anything as necessary for a node's handlers to understand their context
     bool wildcard : 1; // if true, all children match to this parent if no explicit child-node match is found
     bool hidden : 1; // if true, do not advertise in .well-known/core
 };

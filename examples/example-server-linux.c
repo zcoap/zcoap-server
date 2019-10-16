@@ -11,18 +11,21 @@
 #include "example-server-linux-fs.h"
 #include "example-server-linux-telemetry.h"
 
-// The filesystem generator, coap_fs_gen, is very cool!  We can reflect any portion
-// of the filesystem we like.   Lets reflect these to provide a good bit of material
-// for our example server:
+// The filesystem generator, coap_fs_gen, is very cool!  We can mount and
+// reflect any node of the filesystem at any node in our CoAP URI tree.
+// coap_fs_gen is recursive, so really does work just as a mount point.
 //
-// /tmp
-// /sys/power
+// Make sure, however, anything 'mounted' has proper permissions set.  Anything
+// accessible to the server and reflected by coap_fs_gen will be accessible to
+// clients.
+//
+// To provide some interesting data for our *example* server, lets mount these:
+//
+// /tmp -> coap:///tmp
+// /sys/power -> coap://telemetry/power
 
-static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen };
-static const coap_node_t power_uri = { .name = "power", .gen = &coap_fs_gen };
-static const coap_node_t *sys_children[] = { &power_uri, NULL };
-static const coap_node_t sys_uri = { "sys", .children = sys_children };
-static const coap_node_t *root_children[] = { &wellknown_uri, &tmp_uri, &sys_uri, &telemetry_uri, NULL };
+static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .metadata = "/tmp" };
+static const coap_node_t *root_children[] = { &wellknown_uri, &tmp_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };
 
 #define DEFAULT_PORT 5683
