@@ -5,15 +5,65 @@
 #include "example-server-linux-fs.h"
 
 /**
+ * Build a solidus-delimited path string from node through its parents all the
+ * way to the mount point.  We identify the mount point as the first node in our
+ * parental lineage where metadata is non-null.  node->metadata stores the mount
+ * point.  With this, we can reconstruct the full filesystem path as
+ *
+ * @param node starting tree-node from which to build the path
+ * @return an allocated and null-terminated string containing the solidus-delimited path from the tree root to node; on error, returns NULL
+ */
+static char *build_path(const coap_node_t *node)
+{
+    size_t path_len = 1 /* null-terminating '\0' */;
+    char *path = calloc(path_len, sizeof(char));
+    if (path == NULL) {
+        return NULL;
+    }
+    const coap_node_t *cur = node;
+    while (cur && !cur->metadata) {
+        size_t segment_len = 1 /* solidus prefix ('/') */;
+        segment_len += cur->name ? strlen(cur->name) : 0;
+        char *resized = realloc(path, path_len + segment_len);
+        if (resized == NULL) {
+            free(path);
+            return NULL;
+        }
+        path = resized;
+        memmove(path + segment_len, path, path_len);
+        path[0] = '/';
+        memcpy(&path[1], cur->name, segment_len - 1);
+        path_len += segment_len;
+        cur = cur->parent;
+    }
+    // Now prepend node->metadata, which has our mount point.
+    if (!cur || !cur->metadata) {
+        free(path);
+        return NULL;
+    }
+    const char *mnt = cur->metadata;
+    size_t mnt_len = strlen(mnt);
+    char *resized = realloc(path, path_len + mnt_len);
+    if (resized == NULL) {
+        free(path);
+        return NULL;
+    }
+    path = resized;
+    memmove(path + mnt_len, path, path_len);
+    memcpy(path, mnt, mnt_len);
+    return path;
+}
+
+/**
  * GET handler for dynamically-generated children of coap_fs_gen mount points.
  * Return the contents of the specified file to the client.
  */
 static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
-    const char *path = node->metadata;
+    char *path = build_path(node);
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: path is NULL!\n", __func__);
+        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -27,7 +77,7 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
             ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
-        return;
+        goto coap_fs_get_out;
     }
     char buf[4096];
     char *file_contents = NULL;
@@ -50,6 +100,9 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
         coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_STREAM, total, file_contents);
     }
     coap_fs_get_out:
+    if (path) {
+        free(path);
+    }
     if (fptr) {
         fclose(fptr);
     }
@@ -65,9 +118,9 @@ static void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
-    const char *path = node->metadata;
+    char *path = build_path(node);
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: path is NULL!\n", __func__);
+        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -81,7 +134,7 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
             ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
-        return;
+        goto coap_fs_put_out;
     }
     fwrite(payload, 1, len, fptr);
     if (ferror(fptr)) {
@@ -89,6 +142,10 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
+    }
+    coap_fs_put_out:
+    if (path) {
+        free(path);
     }
     if (fptr) {
         fclose(fptr);
@@ -102,9 +159,9 @@ static void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
 static void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
-    const char *path = node->metadata;
+    char *path = build_path(node);
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: path is NULL!\n", __func__);
+        ZCOAP_DEBUG("%s: error constructing path\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -119,6 +176,9 @@ static void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
         }
     } else {
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DELETE));
+    }
+    if (path) {
+        free(path);
     }
 }
 
@@ -156,15 +216,7 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
             && (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))) {
             continue;
         }
-        const size_t mnt_len = strlen(mnt);
-        const size_t entry_len = strlen(entry->d_name);
-        const size_t path_len = mnt_len + entry_len + 1 /* '/' */;
-        char path[path_len + 1 /* '/0' */];
-        memcpy(path, mnt, mnt_len);
-        path[mnt_len] = '/';
-        memcpy(&path[mnt_len + 1], entry->d_name, entry_len);
-        path[path_len] = '\0';
-        coap_node_t child = { .name = entry->d_name, .parent = node, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .gen = &coap_fs_gen, .metadata = path };
+        coap_node_t child = { .name = entry->d_name, .parent = node, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .gen = &coap_fs_gen };
         if ((rc = (*recursor)(&child, recursor_data))) {
             goto coap_fs_gen_out;
         }
