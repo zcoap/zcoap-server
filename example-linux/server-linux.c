@@ -24,7 +24,7 @@
 // /tmp -> coap:///tmp
 // /sys/power -> coap://telemetry/power
 
-static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .metadata = "/tmp" };
+static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node };
 static const coap_node_t *root_children[] = { &wellknown_uri, &tmp_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };
 

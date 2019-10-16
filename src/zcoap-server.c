@@ -357,6 +357,9 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
  */
 static coap_code_t iter_wellknown_core(const coap_node_t * const node, const void *data)
 {
+    if (!node || !data) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     const iter_wellknown_core_data_t * const pdata = (iter_wellknown_core_data_t *)data;
     bool match = pdata->parent_href_match; // always inherit parent match
     do {
@@ -1247,8 +1250,9 @@ static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data
 static coap_code_t process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_node_t* const node)
 #endif
 {
-    // On successful handler dispatch, return 0.  In such a case, the handler
-    // becomes responsible for responding to the client and calling discard.
+    // On successful handler dispatch, return CoAP succes, 2.00.  In such a
+    // case, the handler becomes responsible for responding to the client and
+    // calling disard.
     //
     // On failure, return an appropriate error code.
     coap_ct_t ct;
@@ -1432,8 +1436,17 @@ static coap_code_t _iter_req(const coap_node_t* const node, const void* data)
             return code;
         }
     }
-    if (node && node->wildcard) { // if no children matched, but the parent has wildcard set, match to the parent
-        return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node);
+    if (node->wildcard) { // if no children matched, but the parent has wildcard set, recurse into the wildcard function
+        const coap_msg_opt_t *opt = &cdata->path_opts[0];
+        if (opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
+            char child[opt->len + 1];
+            ZCOAP_MEMCPY(child, opt->val, opt->len);
+            child[opt->len] = '\0';
+            coap_code_t code = (*node->wildcard)(node, child, &iter_req, cdata);
+            if (code) {
+                return code;
+            }
+        }
     }
     #ifdef ZCOAP_DEBUG
     {
@@ -1477,6 +1490,9 @@ static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * 
 static coap_code_t iter_req(const coap_node_t* const node, const void* data)
 #endif
 {
+    if (!node || !data) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     const iter_req_data_t *pdata = (const iter_req_data_t *)data;
     if (   !pdata->npath_opts
         || !node->name /* impossible for null-name to be a match */

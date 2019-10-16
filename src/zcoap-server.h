@@ -377,13 +377,34 @@ typedef coap_code_t (*coap_recurse_t)(const coap_node_t* const node, const void*
  * @param parent node under which to dynamically generate child nodes
  * @param recursor recursive callback to which dynamically-created children should be passed
  * @param recursor_data data to pass to the recursive callback function
- * @return 0 on success, an appropriate CoAP error code on failure
+ * @return 0 if the server should keep iterating, else an appropriate CoAP code
  */
 #ifdef __GNUC__
 typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data);
 #else
 typedef coap_code_t (*coap_gen_t)(const coap_node_t* const parent, coap_recurse_t recursor, const void* recursor_data);
 #endif
+
+/**
+ * coap_wildcard_t
+ *
+ * Dynamic wildcard iterator.  Nodes may be set with a 'wildcard' function
+ * matching this interface.  If the server has matched path segments to a
+ * parent node, but no child nodes match, the wildcard iterator will be
+ * called if defined with child name matching the next path segment in the
+ * client request.
+ *
+ * This is useful for creating new, named resources in the tree that do not yet
+ * exist.
+ *
+ * @param parent node under which to dynamically generate a matching 'wildcard' node
+ * @param child name of child node to dynamically create under parent for wildcard match
+ * @param recursor recursive callback to which the dynamically-created wildcard node should be passed
+ * @param recursor_data data to pass to the recursive callback function
+ * @return 0 if the server should keep iterating, else an appropriate CoAP code
+ */
+typedef coap_code_t __attribute__((nonnull (1, 2, 3))) (*coap_wildcard_t)(const coap_node_t * const parent, const char *child, coap_recurse_t recursor, const void *recursor_data);
+>>>>>>> fbffe17... This commit further refactors example-server-linux.fs.c
 
 struct coap_node_s {
     const char *name; // node path segment
@@ -392,14 +413,14 @@ struct coap_node_s {
     const coap_node_t *parent; // pointer to parent node, or NULL for the root node; set by zcoap.c
     const coap_node_t **children; // must be NULL or point to a NULL-terminated array of child noes
     coap_gen_t gen; // must be NULL or point to a child-node generator
+    coap_wildcard_t wildcard; // if set, use this function to dynamically generate a matching 'wildcard' child node when no other children match
     coap_handler_t GET; // GET method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_handler_t PUT; // PUT method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_handler_t POST; // POST method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_handler_t DELETE; // DELETE method pointer; must be NULL or point to a valid zcoap GET method handler
-    coap_init_t init; // init function to call against the node at system init; called by zcoap.c at init if non-null
+    coap_init_t init; // init function to call against the node at system init; called by zcoap-server.c at init if non-null
     coap_validate_t validate; // utility validator for init and PUT/POST; called by zcoap.c PUT/POST utility methods if non-null
     const void *metadata; // node metadata; can be anything as necessary for a node's handlers to understand their context
-    bool wildcard : 1; // if true, all children match to this parent if no explicit child-node match is found
     bool hidden : 1; // if true, do not advertise in .well-known/core
 };
 
@@ -423,7 +444,6 @@ extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_re
 extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t *queryopts);
 extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, const void **payload);
 
-extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req);
 extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
