@@ -57,8 +57,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
     const int sockfd = req->context;
     const struct sockaddr_in *cli_addr = req->route;
     ssize_t sent = sendto(sockfd, rsp, len, MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
-    if (sent < len)
-    {
+    if (sent < len) {
         error("socket write error on respond");
     }
 }
@@ -88,36 +87,29 @@ int main(int argc, char *argv[])
 
     const int portno = DEFAULT_PORT;
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0)
-    {
+    if (sockfd < 0) {
        error("ERROR opening socket");
     }
 
     struct sockaddr_in serv_addr = { .sin_family = AF_INET, .sin_port = htons(portno),
                                      .sin_addr = { .s_addr = INADDR_ANY } };
-    if (bind(sockfd, (const struct sockaddr *)&serv_addr,
-             sizeof(serv_addr)) < 0)
-    {
+    if (bind(sockfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         error("ERROR on binding");
     }
 
-    while (1)
-    {
+    while (1) {
         ssize_t pending = recv(sockfd, NULL, 0, MSG_PEEK | MSG_TRUNC);
-        if (pending < 0)
-        {
+        if (pending < 0) {
             error("ERROR reading from socket");
         }
         uint8_t buf[pending];
         struct sockaddr_in cli_addr =  { 0 };
         socklen_t cli_len = sizeof(cli_addr);
         ssize_t received = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &cli_len);
-        if (received != pending)
-        {
+        if (received != pending) {
             error("ERROR reading from socket - pending and received counts do not match");
         }
-        if (cli_len > sizeof(cli_addr))
-        {
+        if (cli_len > sizeof(cli_addr)) {
             error("recvfrom error - client source address information is truncated");
         }
         dispatch(sockfd, &cli_addr, received, buf);
