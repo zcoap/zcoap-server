@@ -72,18 +72,15 @@
  *
  * PDU contruction immediately prior to transmission from coap_rsp requires
  * very temporary allocation of potentially large buffers.  For this purpose,
- * alloca can be ideal.  Use of alloca is therefore ideal.  But on platforms
- * where this is not available or for which popping large amounts of data on
- * the stack is not acceptable, implementations may substitute definition of
- * alloca with malloc.
+ * alloca can be ideal.  But on platforms where this is not available or for
+ * which popping large amounts of data on the stack is not acceptable,
+ * malloc/free must be used instead.
  *
- * In such cases, a symmetric free call is needed as well.  For that purpose,
- * the zcoap server calls the ZCOAP_ALLOCA_FREE macro.
+ * By default we use these.  But if implementations can benefit, it is
+ * encouraged that ZCOAP_ALLOCA be defined in platform.h.
  */
-//#include <alloca.h>
-#include <malloc.h>
-#define ZCOAP_ALLOCA malloc // if win32, just use mallco and free actually
-#define ZCOAP_ALLOCA_FREE(void) ({ }) // no-op on platforms where we have a real alloca function
+#define ZCOAP_ALLOCA ZCOAP_MALLOC
+#define ZCOAP_ALLOCA_FREE ZCOAP_FREE
 #endif
 
 #ifndef ZCOAP_MEMCPY

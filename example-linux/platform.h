@@ -12,6 +12,7 @@
 
 //#define ZCOAP_MAX_BUF_SIZE 64
 //#define ZCOAP_MAX_PAYLOAD_OPTS 32
+//#define ZCOAP_ALLOCA alloca
 //#define ZCOAP_MALLOC malloc
 //#define ZCOAP_CALLOC calloc
 //#define ZCOAP_REALLOC realloc
