@@ -542,61 +542,6 @@ static href_filter_t get_href_filter(const size_t nopts, const coap_msg_opt_t op
 }
 
 /**
- * GET request handler for .well-known/core.  Perform a depth-first search of
- * the CoAP URI tree and print all URIs as prescribed by RFC-6690.
- *
- * Finds the root node '/' by relative reference from ./core, i.e.:
- *    /.well-known/core/../../
- *
- * @param req initiating CoAP request
- * @param nopts number of request options
- * @param opts request options
- * @param node pointer to .well-known/core tree node
- * @param ctmask (in/out) if non-null, passed to ZCOAP_METHOD_HEADER macro to set appropriate content type bits
- */
-static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
-{
-    ZCOAP_METHOD_HEADER(COAP_FMT_LINK, ZCOAP_FMT_SENTINEL);
-    if (node->parent == NULL || node->parent->parent == NULL) {
-        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
-        return;
-    }
-    const coap_node_t *root = node->parent->parent; // locate root at /.well-known/core/../../
-    const href_filter_t href_filter = get_href_filter(nopts, opts);
-    size_t wkn_len = snprintf_wellknown_core(NULL, 0, root, &href_filter);
-    char *buf = ZCOAP_ALLOCA(wkn_len + 1);
-    if (buf == NULL) {
-        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
-        return;
-    }
-    wkn_len = snprintf_wellknown_core(buf, wkn_len + 1, root, &href_filter);
-    if (wkn_len && buf[wkn_len - 1] == ',') {
-        --wkn_len;
-    }
-    coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_LINK, wkn_len, buf);
-    ZCOAP_ALLOCA_FREE(buf);
-}
-static const coap_node_t core_uri = { .name = "core", .GET = &coap_get_wellknown_core };
-static const coap_node_t *wellknown_children[] = { &core_uri, NULL };
-
-/**
- * wellknown_uri
- *
- * Implementations should place the wellknown URI as an immediate child of each
- * server's URI tree root node.  This provides each referencing tree with a
- * /.well-known/core URI with GET handler that can dynamically produce a tree
- * diagram for dynamic resource discovery from the client side.
- *
- * As can be seen in the handler's implementation above, this is actually
- * pretty complex!  But it's all pretty well-structured.  We're performing a
- * depth-first search using the C stack; cool!  Also worth noting: the ZCoAP
- * server is one of the *very* few (actually, the only one this writer knows of)
- * that provides content-type discovery in the .well-known/core interface.
- * Big value!
- */
-const coap_node_t wellknown_uri = { .name = ".well-known", .children = wellknown_children };
-
-/**
  * Stable comparison for options.  Compares both option number (first) and
  * current memory address (second) to achieve stable sort by preserving relative
  * order for like-numbered options
@@ -811,21 +756,22 @@ void coap_ack(coap_req_data_t* const req)
 }
 
 /**
- * Issue a CoAP response to req and enclosing the passed data.
- * Calls req->discard regardless of outcome.
+ * Compute the response PDU size based upon the passed response options and
+ * payload length, and with consderation of the passed request and its enclosed
+ * variable-length token, which we must return to the requesting client.
  *
  * @param req CoAP request to which to respond
- * @param code CoAP response code
  * @param nopts number of response message options
  * @param opts response message options
  * @param pl_len response payload length
- * @param payload response payload
+ * @param rsp_len (out) computed response length
+ * @return 0 on success, appropriate errno on error
  */
+static int
 #ifdef __GNUC__
-void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, const void * const payload)
-#else
-void coap_rsp(coap_req_data_t* const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, const void* const payload)
+__attribute__((nonnull (1, 5)))
 #endif
+compute_rsp_pdu_len(coap_req_data_t * const req, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, size_t *rsp_len)
 {
     // Check arguments.
     if (   req == NULL
@@ -833,22 +779,35 @@ void coap_rsp(coap_req_data_t* const req, const coap_code_t code, const size_t n
         || req->len < sizeof(coap_msg_t)
         || req->len < sizeof(coap_msg_t) + req->msg->tkl
         || req->msg->tkl > COAP_MAX_TKL
-        || req->responder == NULL) {
-        coap_discard(req);
-        return;
+        || rsp_len == NULL) {
+        return EINVAL;
     }
     // Determine how big our response PDU will be.
-    size_t alen = sizeof(coap_msg_t) + req->msg->tkl;
-    alen += opt_sec_len(nopts, opts);
-    if (pl_len && payload) {
-        alen += COAP_PL_MARKER_SIZE; // for payload marker
-        alen += pl_len; // for the payload itself
+    *rsp_len = sizeof(coap_msg_t) + req->msg->tkl;
+    *rsp_len += opt_sec_len(nopts, opts);
+    if (pl_len) {
+        *rsp_len += COAP_PL_MARKER_SIZE; // for payload marker
+        *rsp_len += pl_len; // for the payload itself
     }
-    // Allocate our response PDU.
-    coap_msg_t *rsp;
-    if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
-        coap_discard(req);
-        return;
+    return 0;
+}
+
+/**
+ * Populate a CoAP response header, token and options array for the passed CoAP
+ * request, enclosing the passed response code and options array.
+ *
+ * @param req CoAP request for which a response must be constructed
+ * @param code CoAP response code
+ * @param nopts number of response message options
+ * @param opts response message options
+ * @param rsp (out) CoAP response buffer to write into - must be large enough to hold token and options!
+ * @return pointer to payload marker write location on success, NULL on failure
+ */
+static uint8_t * __attribute__((nonnull (1, 5))) populate_rsp_header(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], coap_msg_t *rsp)
+{
+    // Check arguments.
+    if (req == NULL || req->msg == NULL || rsp == NULL) {
+        return NULL;
     }
     // Copy message header and token.
     ZCOAP_MEMCPY(rsp, req->msg, sizeof(coap_msg_t) + req->msg->tkl);
@@ -863,7 +822,53 @@ void coap_rsp(coap_req_data_t* const req, const coap_code_t code, const size_t n
     // Insert code, options and payload.
     ZCOAP_MEMCPY(&rsp->code, &code, sizeof(rsp->code));
     uint8_t *opt_ptr = COAP_OPTS(rsp);
-    uint8_t *pl_ptr = stuff_options(opt_ptr, nopts, opts);
+    return stuff_options(opt_ptr, nopts, opts);
+}
+
+/**
+ * Issue a CoAP response to req and enclosing the passed data.
+ * Calls req->discard regardless of outcome.
+ *
+ * @param req CoAP request to which to respond
+ * @param code CoAP response code
+ * @param nopts number of response message options
+ * @param opts response message options
+ * @param pl_len response payload length
+ * @param payload response payload
+ */
+void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, coap_code_t code, const size_t nopts, const coap_opt_t opts[], size_t pl_len, const void * const payload)
+{
+    // Check arguments.
+    if (   req == NULL
+        || req->msg == NULL
+        || req->len < sizeof(coap_msg_t)
+        || req->len < sizeof(coap_msg_t) + req->msg->tkl
+        || req->msg->tkl > COAP_MAX_TKL
+        || req->responder == NULL) {
+        coap_discard(req);
+        return;
+    }
+    if (pl_len && !payload) {
+        pl_len = 0;
+        code = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    // Determine how big our response PDU will be.
+    size_t alen;
+    if (compute_rsp_pdu_len(req, nopts, opts, pl_len, &alen)) {
+        coap_discard(req);
+        return;
+    }
+    // Allocate our response PDU.
+    coap_msg_t *rsp;
+    if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
+        coap_discard(req);
+        return;
+    }
+    uint8_t *pl_ptr = populate_rsp_header(req, code, nopts, opts, rsp);
+    if (pl_ptr == NULL) {
+        coap_discard(req);
+        return;
+    }
     if (pl_len && payload) {
         *pl_ptr = COAP_PAYLOAD_MARKER;
         ++pl_ptr;
@@ -945,6 +950,103 @@ void coap_status_rsp(coap_req_data_t* const req, const coap_code_t code)
 {
     return coap_rsp(req, code, 0, NULL, 0, NULL);
 }
+
+/**
+ * GET request handler for .well-known/core.  Perform a depth-first search of
+ * the CoAP URI tree and print all URIs as prescribed by RFC-6690.
+ *
+ * Finds the root node '/' by relative reference from ./core, i.e.:
+ *    /.well-known/core/../../
+ *
+ * Note that this function does not call into coap_rsp.  Were we to do so, we
+ * would be forced to allocate here and then allocate again up the stack in
+ * coap_rsp.  This could be quite expensive, as /.well-known/core is likely one
+ * of our larger resources.  So instead, we execute all coap response logic
+ * here in immediate context.
+ *
+ * @param req initiating CoAP request
+ * @param nopts number of request options
+ * @param opts request options
+ * @param node pointer to .well-known/core tree node
+ * @param ctmask (in/out) if non-null, passed to ZCOAP_METHOD_HEADER macro to set appropriate content type bits
+ */
+static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
+{
+    ZCOAP_METHOD_HEADER(COAP_FMT_LINK, ZCOAP_FMT_SENTINEL);
+    const uint8_t ct_fmt_link = COAP_FMT_LINK;
+    const coap_opt_t rsp_opts[] = {
+        { .num = COAP_OPT_CONTENT_FMT, .val = &ct_fmt_link },
+    };
+    if (node->parent == NULL || node->parent->parent == NULL) {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+        return;
+    }
+    const coap_node_t *root = node->parent->parent; // locate root at /.well-known/core/../../
+    const href_filter_t href_filter = get_href_filter(nopts, opts);
+    size_t wkn_len = snprintf_wellknown_core(NULL, 0, root, &href_filter);
+    size_t pdu_len;
+    if (compute_rsp_pdu_len(req, NELM(rsp_opts), rsp_opts, wkn_len, &pdu_len)) {
+        coap_discard(req);
+        return;
+    }
+    coap_msg_t *rsp = ZCOAP_ALLOCA(pdu_len + 1 /* \0 */);
+    if (rsp == NULL) {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+        return;
+    }
+    uint8_t *pl_ptr = populate_rsp_header(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), NELM(rsp_opts), rsp_opts, rsp);
+    if (pl_ptr == NULL) {
+        ZCOAP_ALLOCA_FREE(rsp);
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+        return;
+    }
+    if (wkn_len) {
+        *pl_ptr = COAP_PAYLOAD_MARKER;
+        ++pl_ptr;
+        size_t _wkn_len = snprintf_wellknown_core(pl_ptr, wkn_len + 1, root, &href_filter);
+        if (_wkn_len > wkn_len) {
+            // oops, wellknown-core changed and is now truncated
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+            return;
+        }
+        size_t delta = wkn_len - _wkn_len;
+        pdu_len -= delta;
+        wkn_len -= delta;
+        if (wkn_len) {
+            if (pl_ptr[wkn_len - 1] == ',') {
+                --wkn_len;
+                --pdu_len;
+            }
+        }
+        if (!wkn_len) {
+            --pdu_len;
+        }
+    }
+    // Transmit the response!
+    (*req->responder)(req, pdu_len, rsp);
+    // Free our memory and cleanup.
+    ZCOAP_ALLOCA_FREE(rsp);
+    coap_discard(req);
+}
+static const coap_node_t core_uri = { .name = "core", .GET = &coap_get_wellknown_core };
+static const coap_node_t *wellknown_children[] = { &core_uri, NULL };
+
+/**
+ * wellknown_uri
+ *
+ * Implementations should place the wellknown URI as an immediate child of each
+ * server's URI tree root node.  This provides each referencing tree with a
+ * /.well-known/core URI with GET handler that can dynamically produce a tree
+ * diagram for dynamic resource discovery from the client side.
+ *
+ * As can be seen in the handler's implementation above, this is actually
+ * pretty complex!  But it's all pretty well-structured.  We're performing a
+ * depth-first search using the C stack; cool!  Also worth noting: the ZCoAP
+ * server is one of the *very* few (actually, the only one this writer knows of)
+ * that provides content-type discovery in the .well-known/core interface.
+ * Big value!
+ */
+const coap_node_t wellknown_uri = { .name = ".well-known", .children = wellknown_children };
 
 /**
  * Iterator function to find the next option in a CoAP message.
