@@ -196,21 +196,4 @@
 
 #endif /* ZCOAP_DOUBLE */
 
-#ifndef ZCOAP_HTONL
-/**
- * ZCOAP_NTOHS
- *
- * CoAP payloads use network-byte-order for multi-byte itegral fields.  In
- * order to convert from host byte order to network byte order, the ZCoAP
- * server needs ntoh-style conversion functions.  The standard place to locate
- * these is <arpa/inet.h>.  But that might not be available on all platforms.
- * If not, implementation-specific functions may be defined in platform.h.
- */
-#include <arpa/inet.h>
-#define ZCOAP_HTONL htonl
-#define ZCOAP_HTONS htons
-#define ZCOAP_NTOHL ntohl
-#define ZCOAP_NTOHS ntohs
-#endif /* ZCOAP_HTONL */
-
 #endif /* ZCOAP_CONFIG_H */

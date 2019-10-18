@@ -29,10 +29,6 @@
 
 //#define ZCOAP_DOUBLE double
 //#define SUPPRESS_ZCOAP_EXTENSIONS
-//#define ZCOAP_HTONL htonl
-//#define ZCOAP_HTONS htons
-//#define ZCOAP_NTOHL ntohl
-//#define ZCOAP_NTOHS ntohs
 
 /**
  * Implementation may define a variadic debug function in order to enable debug

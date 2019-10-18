@@ -62,11 +62,52 @@
  */
 static bool host_is_little_endian(void)
 {
-    if (ZCOAP_HTONS(42) != 42) {
-        return true;
-    } else {
+    uint16_t host_short = 42;
+    if (host_short != *(uint8_t *)&host_short) {
         return false;
+    } else {
+        return true;
     }
+}
+
+/**
+ * Convert a 16-bit integer to network byte order.
+ *
+ * @param hostshort 16-bit integer in host byte order
+ * @param 16-bit integer in network byte order
+ */
+static uint16_t __attribute__((const)) ZCOAP_HTONS(uint16_t hostshort)
+{
+    if (!host_is_little_endian) {
+        return hostshort; // no conversion necessary
+    }
+    uint16_t netshort;
+    uint8_t *p = (uint8_t *)&hostshort;
+    uint8_t *q = (uint8_t *)&netshort;
+    q[1] = p[0];
+    q[0] = p[1];
+    return netshort;
+}
+
+/**
+ * Convert a 32-bit integer to network byte order.
+ *
+ * @param hostshort 32-bit integer in host byte order
+ * @param 32-bit integer in network byte order
+ */
+static uint32_t __attribute__((const)) ZCOAP_HTONL(uint32_t hostlong)
+{
+    if (!host_is_little_endian) {
+        return hostlong; // no conversion necessary
+    }
+    uint32_t netlong;
+    uint8_t *p = (uint8_t *)&hostlong;
+    uint8_t *q = (uint8_t *)&netlong;
+    q[3] = p[0];
+    q[2] = p[1];
+    q[1] = p[2];
+    q[0] = p[3];
+    return netlong;
 }
 
 /**
@@ -154,6 +195,8 @@ static ZCOAP_DOUBLE ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
 
 // host-to-net functions are inherently bidirectional
 // and useable for net-to-host.  So simply use these.
+#define ZCOAP_NTOHS ZCOAP_HTONS
+#define ZCOAP_NTOHL ZCOAP_HTONL
 #define ZCOAP_NTOHLL ZCOAP_HTONLL
 #define ZCOAP_NTOHF ZCOAP_HTONF
 #define ZCOAP_NTOHD ZCOAP_HTOND
