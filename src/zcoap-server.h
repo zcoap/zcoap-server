@@ -185,7 +185,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  */
 #define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; }
 
-
+#pragma pack(push, 1)
 typedef struct coap_msg_s {
     uint8_t tkl : 4;
     uint8_t type : 2;
@@ -193,19 +193,10 @@ typedef struct coap_msg_s {
     struct {
         coap_code_t code_detail : COAP_CODE_BITS_DETAIL;
         coap_code_t code_class : COAP_CODE_BITS_CLASS;
-#ifdef __GNUC__
-    } __attribute__((packed)) code;
-#else
-} code; //NEED a PRAGMA Pack for this - pack
-#endif
-
-uint16_t msg_ID;
-
-#ifdef __GNUC__
-	} __attribute__((packed)) coap_msg_t;
-#else
+    } code;
+    uint16_t msg_ID;
 } coap_msg_t;
-#endif
+#pragma pack(pop)
 
 typedef struct coap_req_data_s coap_req_data_t; // forward declaration
 
