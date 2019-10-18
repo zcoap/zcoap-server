@@ -23,8 +23,11 @@
 //#define ZCOAP_MEMSET memset
 //#define ZCOAP_SNPRINTF zsnprintf
 //#define ZCOAP_VSNPRINTF zvsnprintf
+
+//Populate these methods if you want the zcoap-server to lock the helper (ie coap_get_int) when accessing the .data reference.
 //#define ZCOAP_LOCK(void) ({ })
 //#define ZCOAP_UNLOCK(void) ({ })
+
 //#define ZCOAP_DOUBLE double
 //#define SUPPRESS_ZCOAP_EXTENSIONS
 //#define ZCOAP_HTONL htonl

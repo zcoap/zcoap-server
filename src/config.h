@@ -2,7 +2,7 @@
  * File:   config.h
  * Author: Michael Sandstedt
  *
- * Configure the ZCoAP server with all defaults not already
+ * Configure the zcoap-server with all defaults not already
  * defined in platform.h.
  *
  * Created on September 12th, 2019
@@ -56,7 +56,7 @@
 /**
  * ZCOAP_MALLOC and family
  *
- * The ZCoAP server dynamically allocates memory.  What dynamic
+ * The zcoap-server dynamically allocates memory.  What dynamic
  * allocation family should we use?  By default, we use the stdlib functions.
  */
 #include <stdlib.h>
@@ -80,8 +80,9 @@
  * In such cases, a symmetric free call is needed as well.  For that purpose,
  * the zcoap server calls the ZCOAP_ALLOCA_FREE macro.
  */
-#include <alloca.h>
-#define ZCOAP_ALLOCA alloca
+#include <alloca.h> //Keep if switch is turned on in platform, if you don't have it, (win32) replace with win32 version, or 
+#include <malloc.h>
+#define ZCOAP_ALLOCA alloca // if win32, just use mallco and free actually
 #define ZCOAP_ALLOCA_FREE(void) ({ }) // no-op on platforms where we have a real alloca function
 #endif
 
@@ -89,7 +90,7 @@
 /**
  * ZCOAP_MEMCPY
  *
- * What memory copy function should the ZCoAP server use?  By default, we
+ * What memory copy function should the zcoap-server use?  By default, we
  * use the string.h function.
  */
 #include <string.h>
@@ -100,7 +101,7 @@
 /**
  * ZCOAP_MEMMOVE
  *
- * What memory move function should the ZCoAP server use?  By default, we
+ * What memory move function should the zcoap-server use?  By default, we
  * use the string.h function.
  */
 #include <string.h>
@@ -111,7 +112,7 @@
 /**
  * ZCOAP_MEMSET
  *
- * What memory set function should the ZCoAP server use?  By default, we
+ * What memory set function should the zcoap-server use?  By default, we
  * use the string.h function.
  */
 #include <string.h>
@@ -122,7 +123,7 @@
 /**
  * ZCOAP_SNPRINTF
  *
- * What snprintf shoudl the ZCoAP server use?  By default, for speed and
+ * What snprintf shoudl the zcoap-server use?  By default, for speed and
  * to achieve reentrance on platforms where this is NOT assured, we use our
  * own!
  */
@@ -136,8 +137,8 @@
 /**
  * ZCOAP_LOCK
  *
- * The ZCoAP utility GET and PUT methods will access platform memory.
- * If operating in a multi-threaded environment, the ZCoAP server must
+ * The zcoap-server utility GET and PUT methods will access platform memory.
+ * If operating in a multi-threaded environment, the zcoap-server must
  * protect access to this memory.  This is achieved with calls to the
  * ZCOAP_LOCK and ZCOAP_UNLOCK macros.  But zcoap is portable has no notion
  * of YOUR platform.  Thus, if YOU wish to use zcoap in a multi-threaded
@@ -161,9 +162,9 @@
  * Consider: all floating point constants in C not explicitly declared
  * single-precision by appending 'f' are implicitly double-precision.
  *
- * But for our purposes in the ZCoAP server, when we say 'double', we
+ * But for our purposes in the zcoap-server, when we say 'double', we
  * really do mean IEEE-754 double-precision and may be using this format
- * on the wire.  Thus we provide this macro logic.  The ZCoAP server
+ * on the wire.  Thus we provide this macro logic.  The zcoap-server
  * config will attempt to auto-detect this and configure correctly for YOUR
  * platform.  In testing, this has worked everywhere we've thought to check.
  * But implementations may override this by defining their own ZCOAP_DOUBLE.

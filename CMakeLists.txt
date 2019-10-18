@@ -10,11 +10,8 @@ message(STATUS "\r\n********************************************\r\n-- zcoap-ser
 message(STATUS "TOOLCHAIN = ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" "-Werror -Wshadow")
-
 add_library(zcoap-server
             src/config.h
-            src/platform.h
             src/zcoap-server.c
             src/zcoap-server.h
             src/zsnprintf.c
@@ -26,16 +23,22 @@ target_link_libraries(zcoap-server
 IF (WIN32)
 
 add_executable(example-server-win32
-               examples/example-server-win32.c)
+               example-win32/platform.h
+               example-win32/example-server-win32.c
+               example-win32/example-server-win32-endpoints.c
+               example-win32/example-server-win32-endpoints.h)
 
 ELSE()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" "-Werror -Wshadow")
+
 add_executable(example-server-linux
-               examples/example-server-linux.c
-               examples/example-server-linux-fs.c
-               examples/example-server-linux-fs.h
-               examples/example-server-linux-telemetry.c
-               examples/example-server-linux-telemetry.h)
+               example-linux/platform.h
+               example-linux/example-server-linux.c
+               example-linux/example-server-linux-fs.c
+               example-linux/example-server-linux-fs.h
+               example-linux/example-server-linux-telemetry.c
+               example-linux/example-server-linux-telemetry.h)
 
 target_link_libraries(example-server-linux
                       zcoap-server)
