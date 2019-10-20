@@ -21,7 +21,7 @@
 //
 // To provide some interesting data for our *example* server, lets mount these:
 //
-// /tmp -> coap:///tmp
+// /tmp -> coap://tmp
 // /sys/power -> coap://telemetry/power
 
 static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DEL = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node };
@@ -60,6 +60,9 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
     if (sent < len) {
         error("socket write error on respond");
     }
+
+     printf("Sent %d bytes back to client!", sent);
+     fflush( stdout );
 }
 
 /**
@@ -85,6 +88,9 @@ int main(int argc, char *argv[])
 {
     coap_init(&root); // must always init our tree before use!
 
+    printf("Starting server-linux example...\n");
+    fflush( stdout );
+
     const int portno = DEFAULT_PORT;
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -98,6 +104,10 @@ int main(int argc, char *argv[])
     }
 
     while (1) {
+
+        printf("Listening on port %d...\n", DEFAULT_PORT);
+        fflush( stdout );
+
         ssize_t pending = recv(sockfd, NULL, 0, MSG_PEEK | MSG_TRUNC);
         if (pending < 0) {
             error("ERROR reading from socket");
@@ -105,6 +115,7 @@ int main(int argc, char *argv[])
         uint8_t buf[pending];
         struct sockaddr_in cli_addr =  { 0 };
         socklen_t cli_len = sizeof(cli_addr);
+
         ssize_t received = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &cli_len);
         if (received != pending) {
             error("ERROR reading from socket - pending and received counts do not match");
@@ -112,6 +123,12 @@ int main(int argc, char *argv[])
         if (cli_len > sizeof(cli_addr)) {
             error("recvfrom error - client source address information is truncated");
         }
+
+        printf("Received %d bytes, sending to zcoap-server", received);
+        fflush( stdout );
+
+        //Send request into zcoap-server library
+        //coap_udp_respond is called by the library when the response is ready
         dispatch(sockfd, &cli_addr, received, buf);
     }
     return 0;

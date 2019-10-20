@@ -3386,7 +3386,7 @@ coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void* const paylo
  */
 coap_code_t
 #ifdef __GNUC__
-_attribute__((nonnull(3, 4)))
+__attribute__((nonnull(3, 4)))
 #endif
 coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const payload, float * const out)
 {

@@ -1,8 +1,8 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "example-server-linux-fs.h"
-#include "example-server-linux-telemetry.h"
+#include "server-linux-fs.h"
+#include "server-linux-telemetry.h"
 
 static int server_digits = 8675309;
 static char server_name[50] = { 'J', 'e', 'n', 'n', 'y' };

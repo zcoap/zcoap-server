@@ -28,8 +28,8 @@ ELSE()
 #Linux
 include_directories(example-linux src)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" "-Werror -Wshadow")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" "-Werror -Wshadow")
+#set(CMAKE_CXX_FLAGS "-Werror -Wshadow")
+#set(CMAKE_C_FLAGS "-Werror -Wshadow")
 
 ENDIF()
 
@@ -56,12 +56,7 @@ add_executable(example-server-win32
 
 #Link this application against zcoap-server
 target_link_libraries(example-server-win32
-                      zcoap-server
-                      #These two needed for _isnanl usage in zsnprintf.c
-                      #user32.lib
-					  #libcmt.lib
-                      #Gdi32.lib)
-					  )
+                      zcoap-server)
 
 ELSE()
 
