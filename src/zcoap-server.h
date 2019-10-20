@@ -193,9 +193,19 @@ typedef struct coap_msg_s {
     struct {
         coap_code_t code_detail : COAP_CODE_BITS_DETAIL;
         coap_code_t code_class : COAP_CODE_BITS_CLASS;
+#ifdef __GNUC__
     } __attribute__((packed)) code;
-    uint16_t msg_ID;
-} __attribute__((packed)) coap_msg_t;
+#else
+} code; //NEED a PRAGMA Pack for this - pack
+#endif
+
+uint16_t msg_ID;
+
+#ifdef __GNUC__
+	} __attribute__((packed)) coap_msg_t;
+#else
+} coap_msg_t;
+#endif
 
 typedef struct coap_req_data_s coap_req_data_t; // forward declaration
 
@@ -212,7 +222,12 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
  *
  * @param req incoming CoAP message with request-centric implementation metadata
  */
+
+#ifdef __GNUC__
 typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data_t * const req);
+#else
+typedef void (*const coap_discard_t)(coap_req_data_t* const req);
+#endif
 
 /**
  * coap_responder_t
@@ -227,7 +242,11 @@ typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data
  * @param len length of the CoAP response message to be injected into the implementation-specific transport layer
  * @param rsp buffer containing a fully-formed response for injection into the implementation-specific transport layer
  */
+#ifdef __GNUC__
 typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp);
+#else
+typedef void (*const coap_responder_t)(coap_req_data_t* const req, const size_t len, const coap_msg_t* rsp);
+#endif
 
 /**
  */
@@ -325,16 +344,27 @@ typedef struct coap_msg_opt_s {
 } coap_msg_opt_t;
 
 typedef struct coap_node_s coap_node_t; // forward declaration
+
+#ifdef __GNUC__
 typedef void __attribute__((nonnull (1, 2))) (*coap_handler_t)(ZCOAP_METHOD_SIGNATURE);
 typedef void __attribute__((nonnull(1))) (*coap_init_t)(const coap_node_t * const node);
 typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile void *data);
+#else
+typedef void (*coap_handler_t)(ZCOAP_METHOD_SIGNATURE);
+typedef void (*coap_init_t)(const coap_node_t* const node);
+typedef const char* (*coap_validate_t)(volatile void* data); 
+#endif
 
 /**
  * coap_recruse_t
  *
  * Recursor callback interface for depth-first, stack-based tree operations.
  */
+#ifdef __GNUC__
 typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(const coap_node_t * const node, const void *data);
+#else
+typedef coap_code_t (*coap_recurse_t)(const coap_node_t* const node, const void* data);
+#endif
 
 /**
  * coap_gen_t
@@ -349,7 +379,11 @@ typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(const coap
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 on success, an appropriate CoAP error code on failure
  */
+#ifdef __GNUC__
 typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data);
+#else
+typedef coap_code_t (*coap_gen_t)(const coap_node_t* const parent, coap_recurse_t recursor, const void* recursor_data);
+#endif
 
 struct coap_node_s {
     const char *name; // node path segment
@@ -382,6 +416,7 @@ typedef uint8_t zcoap_bool_t;
 #define ZCOAP_FALSE_STR "false"
 #define TO_ZCOAP_BOOL(_b) ((_b) ? ZCOAP_TRUE : ZCOAP_FALSE)
 
+#ifdef __GNUC__
 extern coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t *ct);
 extern coap_code_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool *found, uint32_t *size1);
 extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t *nqueryopts);
@@ -394,7 +429,28 @@ extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, 
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
 extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
 
+#else
+
+extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, uint32_t* size1);
+extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
+extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
+extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
+
+extern void coap_ack(coap_req_data_t* req);
+extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);
+extern void coap_content_rsp(coap_req_data_t* req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void* payload);
+extern void coap_status_rsp(coap_req_data_t* req, coap_code_t code);
+extern void coap_detail_rsp(coap_req_data_t* req, coap_code_t code, const char* detail);
+
+#endif
+
+#ifdef __GNUC__
 extern void coap_printf(coap_req_data_t *req, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
+#else
+extern void coap_printf(coap_req_data_t* req, const char* fmt, ...);
+#endif
+
 extern void coap_return_bool(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool val);
 extern void coap_return_u16(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint16_t val);
 extern void coap_return_u32(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint32_t val);
@@ -484,8 +540,12 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #endif
 
 extern void coap_init(const coap_node_t *root); // <- init must be called against any URI trees before it is passed to the server!
-extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, const coap_node_t *root); // <- server entry point!
 
+#ifdef __GNUC__
+extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, const coap_node_t *root); // <- server entry point!
+#else
+extern void coap_rx(coap_req_data_t* req, const coap_node_t* root); // <- server entry point!
+#endif
 extern const coap_node_t wellknown_uri;
 
 #endif	/* ZCOAP_SERVER_H */

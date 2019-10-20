@@ -4,8 +4,6 @@
  *
  * Define platform overrides for the ZCoAP server here.  Else, defaults
  * in config.h are used.
- *
- * Created on September 12th, 2019
  */
 
 

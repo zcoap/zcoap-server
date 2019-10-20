@@ -11,7 +11,7 @@
 #ifndef ZCOAP_CONFIG_H
 #define ZCOAP_CONFIG_H
 
-#include "platform.h"
+#include "<platform.h>
 
 #ifndef SUPPRESS_ZCOAP_EXTENSIONS
 /**
@@ -80,9 +80,9 @@
  * In such cases, a symmetric free call is needed as well.  For that purpose,
  * the zcoap server calls the ZCOAP_ALLOCA_FREE macro.
  */
-#include <alloca.h> //Keep if switch is turned on in platform, if you don't have it, (win32) replace with win32 version, or 
+//#include <alloca.h>
 #include <malloc.h>
-#define ZCOAP_ALLOCA alloca // if win32, just use mallco and free actually
+#define ZCOAP_ALLOCA malloc // if win32, just use mallco and free actually
 #define ZCOAP_ALLOCA_FREE(void) ({ }) // no-op on platforms where we have a real alloca function
 #endif
 
@@ -170,13 +170,33 @@
  * But implementations may override this by defining their own ZCOAP_DOUBLE.
  */
 #include <float.h>
-#if (__DBL_MANT_DIG__ != 53 && __LDBL_MANT_DIG__ == 53)
-#define ZCOAP_DOUBLE long double
-#elif (__DBL_MANT_DIG__ != 53)
-#error unable find a native 64-bit type for the zcoap double!
+
+#ifdef __GNUC__
+
+    #if (__DBL_MANT_DIG__ != 53 && __LDBL_MANT_DIG__ == 53)
+        #define ZCOAP_DOUBLE long double
+        #define RESPONSE_FMT_DOUBLE "%.8Lg"
+    #elif (__DBL_MANT_DIG__ != 53)
+        #error unable find a native 64-bit type for the zcoap double!
+    #else
+        #define ZCOAP_DOUBLE double
+        #define RESPONSE_FMT_DOUBLE "%.8g"
+    #endif
+
 #else
-#define ZCOAP_DOUBLE double
+
+    #if (DBL_MANT_DIG != 53 && LDBL_MANT_DIG == 53)
+        #define ZCOAP_DOUBLE long double
+        #define RESPONSE_FMT_DOUBLE "%.8Lg"
+    #elif (DBL_MANT_DIG != 53)
+        #error unable find a native 64-bit type for the zcoap double!
+    #else
+        #define ZCOAP_DOUBLE double
+        #define RESPONSE_FMT_DOUBLE "%.8g"
+    #endif
+
 #endif
+
 #endif /* ZCOAP_DOUBLE */
 
 #ifndef ZCOAP_HTONL

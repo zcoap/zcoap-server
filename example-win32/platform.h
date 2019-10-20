@@ -1,11 +1,8 @@
 /*
  * File:   platform.h
- * Author: Michael Sandstedt
- *
+
  * Define platform overrides for the Zepto CoAP server here.  Else, defaults
  * in config.h are used.
- *
- * Created on September 12th, 2019
  */
 
 
@@ -39,7 +36,7 @@
  * Implementation may define a variadic debug function in order to enable debug
  * logging from the Zepto CoAP server.
  */
-#define ZCOAP_DEBUG(format, args...) fprintf (stderr, format, args)
+//#define ZCOAP_DEBUG(format, args...) fprintf (stderr, format, args)
 
 
 #endif /* ZCOAP_PLATFORM_H */

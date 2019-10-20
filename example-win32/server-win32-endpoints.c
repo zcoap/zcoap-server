@@ -1,7 +1,7 @@
 //#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "example-server-win32-endpoints.h"
+#include "server-win32-endpoints.h"
 
 static int server_digits = 8675309;
 static char server_name[50] = { 'M', 'e', 'g', '3', '2' };

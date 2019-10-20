@@ -8,8 +8,8 @@
 #include <netinet/in.h>
 
 #include "../src/zcoap-server.h"
-#include "example-server-linux-fs.h"
-#include "example-server-linux-telemetry.h"
+#include "server-linux-fs.h"
+#include "server-linux-telemetry.h"
 
 // The filesystem generator, coap_fs_gen, is very cool!  We can mount and
 // reflect any node of the filesystem at any node in our CoAP URI tree.

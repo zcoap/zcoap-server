@@ -25,7 +25,7 @@
 #include "../src/zcoap-server.h"
 
 //Include example URIs
-#include "example-server-win32-endpoints.h"
+#include "server-win32-endpoints.h"
 
 // Example tree
 // /.well-known/core
@@ -58,11 +58,11 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
     const struct SOCKET *cli_sock = req->route;
 
 	// Echo the buffer back to the sender
-    int iSendResult = send(ClientSocket, rsp, iResult, 0);
+    int iSendResult = send(cli_sock, rsp, len, 0);
 
     if (iSendResult == SOCKET_ERROR) {
         printf("send failed with error: %d\n", WSAGetLastError());
-        closesocket(ClientSocket);
+        closesocket(cli_sock);
         WSACleanup();
         return 1;
     }

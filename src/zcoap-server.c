@@ -32,14 +32,6 @@
 #define RESPONSE_FMT_ULLONG "0x%llX" /* 64-biit decimal printing can be truncated by znsprintf; hex printing works though */
 #define RESPONSE_FMT_LLONG RESPONSE_FMT_ULLONG
 #define RESPONSE_FMT_FLOAT "%.8g"
-#if (__DBL_MANT_DIG__ != 53 && __LDBL_MANT_DIG__ == 53)
-#define RESPONSE_FMT_DOUBLE "%.8Lg"
-#define ZCOAP_DOUBLE long double
-#elif (__DBL_MANT_DIG__ != 53)
-#error unable find a native 64-bit type for the zcoap double!
-#else
-#define RESPONSE_FMT_DOUBLE "%.8g"
-#endif
 
 #define RESPONSE_FMT_U16 RESPONSE_FMT_UINT
 #define RESPONSE_FMT_I16 RESPONSE_FMT_INT
@@ -83,7 +75,11 @@ static bool host_is_little_endian(void)
  * @param hostllong 64-bit integer in host byte order
  * @param 64-bit integer in network byte order
  */
+#ifdef __GNUC__
 static uint64_t __attribute__((const)) ZCOAP_HTONLL(uint64_t hostllong)
+#else
+static uint64_t ZCOAP_HTONLL(uint64_t hostllong)
+#endif
 {
     if (!host_is_little_endian) {
         return hostllong; // no conversion necessary
@@ -108,7 +104,11 @@ static uint64_t __attribute__((const)) ZCOAP_HTONLL(uint64_t hostllong)
  * @param hostfloat single-precision IEEE-754 float in host byte order
  * @param single-precision IEEE-754 float in network byte order
  */
+#ifdef __GNUC__
 static float __attribute__((const)) ZCOAP_HTONF(float hostfloat)
+#else
+static float ZCOAP_HTONF(float hostfloat)
+#endif
 {
     if (!host_is_little_endian) {
         return hostfloat; // no conversion necessary
@@ -129,7 +129,11 @@ static float __attribute__((const)) ZCOAP_HTONF(float hostfloat)
  * @param hostdouble double-precision IEEE-754 float in host byte order
  * @param double-precision IEEE-754 float in network byte order
  */
+#ifdef __GNUC__
 static ZCOAP_DOUBLE __attribute__((const)) ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
+#else
+static ZCOAP_DOUBLE ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
+#endif
 {
     if (!host_is_little_endian) {
         return hostdouble; // no conversion necessary
@@ -168,7 +172,11 @@ typedef struct href_filter_s {
  * @param href_filter href filter object
  * @return true if match, false if no match
  */
+#ifdef __GNUC__
 static bool __attribute__((pure)) href_match(const char *name, const href_filter_t *href_filter)
+#else
+static bool href_match(const char* name, const href_filter_t* href_filter)
+#endif
 {
     if (href_filter->wildcard) {
         if (strlen(name) >= href_filter->len && !strncmp(href_filter->str, name, href_filter->len)) {
@@ -703,7 +711,11 @@ static size_t opt_sec_len(const size_t nopts, const coap_opt_t opts[])
  *
  * @param req CoAP request to discard
  */
+#ifdef __GNUC__
 static void __attribute__((nonnull (1))) coap_discard(coap_req_data_t * const req)
+#else
+static void coap_discard(coap_req_data_t* const req)
+#endif
 {
     if (req == NULL) {
         return;
@@ -723,7 +735,11 @@ static void __attribute__((nonnull (1))) coap_discard(coap_req_data_t * const re
  * @param req CoAP request to ACK
  * @return 0 on success, non-zero on error
  */
+#ifdef __GNUC__
 void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req)
+#else
+void coap_ack(coap_req_data_t* const req)
+#endif
 {
     if (   req == NULL
         || req->msg == NULL
@@ -759,7 +775,11 @@ void __attribute__((nonnull (1))) coap_ack(coap_req_data_t * const req)
  * @param pl_len response payload length
  * @param payload response payload
  */
+#ifdef __GNUC__
 void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, const void * const payload)
+#else
+void coap_rsp(coap_req_data_t* const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, const void* const payload)
+#endif
 {
     // Check arguments.
     if (   req == NULL
@@ -820,7 +840,11 @@ void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t * const req, const co
  * @param pl_len payload length
  * @param payload payload
  */
+#ifdef __GNUC__
 void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t * const req, const coap_code_t code, coap_ct_t ct, const size_t pl_len, const void * const payload)
+#else
+void coap_content_rsp(coap_req_data_t* const req, const coap_code_t code, coap_ct_t ct, const size_t pl_len, const void* const payload)
+#endif
 {
     coap_opt_t opts[] = {
         { .num = COAP_OPT_CONTENT_FMT },
@@ -851,7 +875,11 @@ void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t * const req, 
  * @param detail
  * @return 0 on success, non-zero on error
  */
+#ifdef __GNUC__
 void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t * const req, const coap_code_t code, const char * const detail)
+#else
+void coap_detail_rsp(coap_req_data_t* const req, const coap_code_t code, const char* const detail)
+#endif
 {
     coap_content_rsp(req, code, COAP_FMT_TEXT, strlen(detail), detail);
 }
@@ -863,7 +891,11 @@ void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t * const req, c
  * @param code CoAP response code
  * @return 0 on success, non-zero on error
  */
+#ifdef __GNUC__
 void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t * const req, const coap_code_t code)
+#else
+void coap_status_rsp(coap_req_data_t* const req, const coap_code_t code)
+#endif
 {
     return coap_rsp(req, code, 0, NULL, 0, NULL);
 }
@@ -960,7 +992,11 @@ static coap_code_t opt_next(const uint8_t **buf, size_t * const remain, uint32_t
  * @param nopts (out) number of options found in the request
  * @return 0 on success, else a CoAP error code
  */
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 2))) coap_count_opts(coap_req_data_t * const req, size_t * const nopts)
+#else
+static coap_code_t coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
+#endif
 {
     if (req == NULL || nopts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1003,7 +1039,11 @@ static coap_code_t __attribute__((nonnull (1, 2))) coap_count_opts(coap_req_data
  * @param opts (out) write location for parsed options
  * @return 0 on success, else a CoAP error code
  */
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 3))) coap_get_opts(coap_req_data_t * const req, const size_t nopts, coap_msg_opt_t * const opts)
+#else
+static coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* const opts)
+#endif
 {
     if (req == NULL || opts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1044,7 +1084,11 @@ static coap_code_t __attribute__((nonnull (1, 3))) coap_get_opts(coap_req_data_t
  * @param ct (out) written to content format option value if a content format option was found
  * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t * const ct)
+#else
+coap_code_t coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+#endif
 {
     if (ct == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1135,7 +1179,11 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_
  * @param payload (out) payload
  * @return 0 on success, else CoAP error code
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull (1, 2, 3))) coap_get_payload(coap_req_data_t * const req, size_t * const len, const void **payload)
+#else
+coap_code_t coap_get_payload(coap_req_data_t* const req, size_t* const len, const void** payload)
+#endif
 {
     if (req == NULL || len == NULL || payload == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1193,7 +1241,11 @@ coap_code_t __attribute__((nonnull (1, 2, 3))) coap_get_payload(coap_req_data_t 
  * @param node server tree node matching request URI
  * @return 0 on success, else a CoAP error code
  */
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 4))) process_req_uri(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_node_t * const node)
+#else
+static coap_code_t process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_node_t* const node)
+#endif
 {
     // On successful handler dispatch, return 0.  In such a case, the handler
     // becomes responsible for responding to the client and calling discard.
@@ -1316,7 +1368,11 @@ static size_t coap_count_children(const coap_node_t * const node)
     return count;
 }
 
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * const node, const void *data); // Forward declaration.
+#else
+static coap_code_t iter_req(const coap_node_t* const node, const void* data);
+#endif
 
 /**
  * Data interface for iter_req.
@@ -1345,7 +1401,11 @@ typedef struct iter_req_data_s {
  * @param data iter_req_data_t
  * @return 0.00 if caller should keep iterating, non-zero if not; inject_coap_req will issue coap_status_rsp for non-2.00-class success codes
  */
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 2))) _iter_req(const coap_node_t * const node, const void *data)
+#else
+static coap_code_t _iter_req(const coap_node_t* const node, const void* data)
+#endif
 {
     const iter_req_data_t *cdata = (const iter_req_data_t *)data;
     if (!cdata->npath_opts) { // Ding ding!  No more path options!  Match!
@@ -1411,7 +1471,11 @@ static coap_code_t __attribute__((nonnull (1, 2))) _iter_req(const coap_node_t *
  * @param data iter_req_data_t
  * @return 0.00 if caller should keep iterating, non-zero if not; inject_coap_req will issue coap_status_rsp for non-2.00-class success codes
  */
+#ifdef __GNUC__
 static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * const node, const void *data)
+#else
+static coap_code_t iter_req(const coap_node_t* const node, const void* data)
+#endif
 {
     const iter_req_data_t *pdata = (const iter_req_data_t *)data;
     if (   !pdata->npath_opts
@@ -1437,7 +1501,11 @@ static coap_code_t __attribute__((nonnull (1, 2))) iter_req(const coap_node_t * 
  * @param req CoAP request to inject into the server
  * @param root root of the URI tree that should be used to process the request
  */
+#ifdef __GNUC__
 static void __attribute__((nonnull (1, 1))) inject_coap_req(coap_req_data_t * const req, const coap_node_t * const root)
+#else
+static void inject_coap_req(coap_req_data_t* const req, const coap_node_t* const root)
+#endif
 {
     size_t nopts;
     size_t npath_opts = 0;
@@ -1620,7 +1688,11 @@ void coap_init(const coap_node_t * const root)
  * @param nqueryopts (out) number of query options found
  * @return 0 on success, else a CoAP error code
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], size_t * const nqueryopts)
+#else
+coap_code_t coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], size_t* const nqueryopts)
+#endif
 {
     if ((opts == NULL && req == NULL) || nqueryopts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1680,7 +1752,11 @@ coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_
  * @param queryopts (out) written with the requests query options
  * @return 0 on success, else a CoAP error code
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t * const queryopts)
+#else
+coap_code_t coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t* const queryopts)
+#endif
 {
     if (nqueryopts == 0) {
         return 0;
@@ -1741,7 +1817,11 @@ coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t 
  * @param size1 (out) size1 option value
  * @return 0 on success, else a CoAP error code; note that size1 not found is NOT an error
  */
+#ifdef __GNUC__
 extern uint8_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t * const req, size_t nopts, const coap_msg_opt_t opts[], bool * const found, uint32_t * const size1)
+#else
+extern uint8_t coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], bool* const found, uint32_t* const size1)
+#endif
 {
     if ((opts == NULL && req == NULL) || found == NULL || size1 == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2433,7 +2513,11 @@ int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE *
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payload, uint64_t * const out)
+#else
+coap_code_t coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void* const payload, uint64_t* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2577,7 +2661,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u64(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payload, int64_t * const out)
+#else
+coap_code_t coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void* const payload, int64_t* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2715,7 +2803,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i64(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void * const payload, uint32_t * const out)
+#else
+coap_code_t coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void* const payload, uint32_t* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2863,7 +2955,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u32(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void * const payload, int32_t * const out)
+#else
+coap_code_t coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void* const payload, int32_t* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -3008,7 +3104,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i32(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const payload, float * const out)
+#else
+coap_code_t coap_parse_req_float(const coap_ct_t ct, const size_t len, const void* const payload, float* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -3129,7 +3229,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_float(const coap_ct_t 
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t ct, const size_t len, const void * const payload, ZCOAP_DOUBLE * const out)
+#else
+coap_code_t coap_parse_req_double(const coap_ct_t ct, const size_t len, const void* const payload, ZCOAP_DOUBLE* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -3249,7 +3353,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_double(const coap_ct_t
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void * const payload, uint16_t * const out)
+#else
+coap_code_t coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void* const payload, uint16_t* const out)
+#endif
 {
     uint32_t u32;
     coap_code_t rc;
@@ -3273,7 +3381,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_u16(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void *payload, int16_t * const out)
+#else
+coap_code_t coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void* payload, int16_t* const out)
+#endif
 {
     int32_t i32;
     coap_code_t rc;
@@ -3298,7 +3410,11 @@ coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_i16(const coap_ct_t ct
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
+#ifdef __GNUC__
 coap_code_t __attribute__((nonnull(3, 4))) coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void * const payload, bool * const out)
+#else
+coap_code_t coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void* const payload, bool* const out)
+#endif
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
