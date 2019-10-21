@@ -29,14 +29,16 @@ static void coap_put_server_name(ZCOAP_METHOD_SIGNATURE)
 
 static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
 {
-    ZCOAP_METHOD_HEADER(
-         COAP_FMT_TEXT,
-         #ifdef ZCOAP_EXTENSIONS
-         ZCOAP_FMT_INT,
-         #endif
-         ZCOAP_FMT_SENTINEL);
+#ifdef ZCOAP_EXTENSIONS
+	ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_INT, ZCOAP_FMT_SENTINEL);
+#else
+	ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_SENTINEL);
+#endif
+
     int temperature = rand() % 100;
+
     max_server_temperature = temperature > max_server_temperature ? temperature : max_server_temperature; // store max
+
     coap_return_int(req, nopts, opts, NULL, temperature);
 }
 

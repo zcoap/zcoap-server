@@ -1,26 +1,14 @@
 
-#undef UNICODE
 
-#define WIN32_LEAN_AND_MEAN
+#include<stdio.h>
+#include<winsock2.h>
 
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdlib.h>
-#include <stdio.h>
+#pragma comment(lib,"ws2_32.lib") //Winsock Library
 
-//Example socket servercode taken from 
-//https://docs.microsoft.com/en-us/windows/win32/winsock/complete-server-code
+#define BUFLEN 512	//Max length of buffer
+#define PORT 5683	//The port on which to listen for incoming data
 
-// Need to link with Ws2_32.lib
-#pragma comment (lib, "Ws2_32.lib")
-// #pragma comment (lib, "Mswsock.lib")
-
-#define DEFAULT_BUFLEN 1020
-
-//Use default coap port per rfc
-#define DEFAULT_PORT "5683"
-
+//
 //Include the server
 #include "../src/zcoap-server.h"
 
@@ -36,6 +24,20 @@
 
 static const coap_node_t* root_children[] = { &wellknown_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };
+
+//Winsock2 socket resources for application to list on a UDP socket.
+//A coap client would send a request, for example to coap://127.0.0.1:5689/.well-known/core
+SOCKET receive_sock;
+struct sockaddr_in server, si_other;
+int slen, recv_len;
+char buf[BUFLEN];
+WSADATA wsa;
+
+typedef struct CoapTransaction_t {
+    SOCKET rxSocket;
+    struct sockaddr_in* rxAddress;
+    int socketaddr_length;
+}coap_transaction;
 
 /**
  * UDP CoAP responder and ack function.  Used as callback from zcoap-server.
@@ -55,19 +57,22 @@ static const coap_node_t root = { .children = root_children };
  */
 static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
 {
-    const struct SOCKET *cli_sock = req->route;
+    const struct CoapTransaction_t *ct = req->route;
 
-	// Echo the buffer back to the sender
-    int iSendResult = send(cli_sock, rsp, len, 0);
+    printf("    Coap Response - id = %d, code detail = %d, code class = %d, type = %d\n", rsp->msg_ID, rsp->code.code_detail, 
+                                                                                        rsp->code.code_class, rsp->type);
+    
+    //Send coap response to sender
+    int send_result = sendto(ct->rxSocket, rsp, len, 0, (struct sockaddr*)ct->rxAddress, ct->socketaddr_length);
 
-    if (iSendResult == SOCKET_ERROR) {
+    if (send_result == SOCKET_ERROR){
         printf("send failed with error: %d\n", WSAGetLastError());
-        closesocket(cli_sock);
+        closesocket(&ct->rxSocket);
         WSACleanup();
         return 1;
     }
 
-    printf("Bytes sent: %d\n", iSendResult);
+    printf("Bytes sent: %d\n", send_result);
 }
 
 /**
@@ -77,7 +82,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
  * @param len datagram payload length
  * @parm payload UDP payload - presumed to be a CoAP message structure
  */
-static void dispatch(const SOCKET *client_sock, const size_t len, const uint8_t payload[])
+static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t payload[])
 {
     // Make a request
     coap_req_data_t req = {
@@ -85,7 +90,7 @@ static void dispatch(const SOCKET *client_sock, const size_t len, const uint8_t 
 		// Instead, we will pass through a pointer to the ClientSocket which we will send a response on
         .context = 0,
         // The address we should respond to
-        .route = client_sock,
+        .route = receive_sock,
         // Bytes of the cCoAP payload, including the UDP frame
         .msg = (const coap_msg_t *)payload,
         // Number of bytes in the payload
@@ -98,122 +103,77 @@ static void dispatch(const SOCKET *client_sock, const size_t len, const uint8_t 
     coap_rx(&req, &root);
 }
 
-int __cdecl main(void)
+int main()
 {
-    WSADATA wsaData;
-    int iResult;
+    slen = sizeof(si_other);
 
-    SOCKET ListenSocket = INVALID_SOCKET;
-    SOCKET ClientSocket = INVALID_SOCKET;
-
-    struct addrinfo* result = NULL;
-    struct addrinfo hints;
-
-    int iSendResult;
-    char recvbuf[DEFAULT_BUFLEN];
-    int recvbuflen = DEFAULT_BUFLEN;
-
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed with error: %d\n", iResult);
-        return 1;
+    //Initialise winsock
+    printf("\nInitialising Winsock...");
+    if (WSAStartup(MAKEWORD(2, 2), & wsa) != 0)
+    {
+        printf(" Failed.Error Code : % d " , WSAGetLastError());
+        exit(EXIT_FAILURE);
     }
+    printf("Initialised.\n");
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
-
-    // Resolve the server address and port
-    iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-    if (iResult != 0) {
-        printf("getaddrinfo failed with error: %d\n", iResult);
-        WSACleanup();
-        return 1;
+    //Create a socket
+    if ((receive_sock = socket(AF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET)
+    {
+        printf(" Could not create socket : % d ", WSAGetLastError());
     }
+    printf(" Socket created.\n ");
 
-    // Create a SOCKET for connecting to server
-    ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (ListenSocket == INVALID_SOCKET) {
-        printf("socket failed with error: %ld\n", WSAGetLastError());
-        freeaddrinfo(result);
-        WSACleanup();
-        return 1;
+    //Prepare the sockaddr_in structure
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(PORT);
+
+    //Bind
+    if (bind(receive_sock, (struct sockaddr*) & server, sizeof(server)) == SOCKET_ERROR)
+    {
+        printf(" Bind failed with error code : % d ", WSAGetLastError());
+        exit(EXIT_FAILURE);
     }
+    puts(" Bind done ");
 
-    // Setup the TCP listening socket
-    iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-    if (iResult == SOCKET_ERROR) {
-        printf("bind failed with error: %d\n", WSAGetLastError());
-        freeaddrinfo(result);
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
-    }
+    //keep listening for data
+    while (1)
+    {
+        printf(" Waiting for data... ");
+        fflush(stdout);
 
-    freeaddrinfo(result);
+        //clear the buffer by filling null, it might have previously received data
+        memset(buf, '\0', BUFLEN);
 
-    iResult = listen(ListenSocket, SOMAXCONN);
-    if (iResult == SOCKET_ERROR) {
-        printf("listen failed with error: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    // Accept a client socket
-    printf("Listening on port %d\n", DEFAULT_PORT);
-    
-    ClientSocket = accept(ListenSocket, NULL, NULL);
-    if (ClientSocket == INVALID_SOCKET) {
-        printf("accept failed with error: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    // No longer need server socket
-    closesocket(ListenSocket);
-
-    // Receive until the peer shuts down the connection
-    do {
-
-        iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
-
-        if (iResult > 0) {
-            printf("Bytes received: %d\n", iResult);
-
-            // Send new data into CoAP
-            dispatch(&ClientSocket, iResult, recvbuf);
-        }
-        else if (iResult == 0) {
-            printf("Connection closing...\n");
-        }
-        else {
-            printf("recv failed with error: %d\n", WSAGetLastError());
-            closesocket(ClientSocket);
-            WSACleanup();
-            return 1;
+        //try to receive some data, this is a blocking call
+        if ((recv_len = recvfrom(receive_sock, buf, BUFLEN, 0, (struct sockaddr*) &si_other, &slen)) == SOCKET_ERROR)
+        {
+            printf("recvfrom() failed with error code : % d ", WSAGetLastError());
+            exit(EXIT_FAILURE);
         }
 
-    } while (iResult > 0);
+        //print details of the client/peer and the data received
+        printf("Received packet from % s: % d\n " , inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
+        printf("Data: % s\n ", buf);
 
-    // shutdown the connection since we're done
-    iResult = shutdown(ClientSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ClientSocket);
-        WSACleanup();
-        return 1;
+        printf("Sending to zcoap-server...");
+
+        //coap_transaction is just a struct we use to keep track of the transaction as we
+        //pass the data into zcoap-server.  We need this data so that the response function
+        //is able to send data back to the socket recipent
+        coap_transaction ct;
+        ct.rxAddress = &si_other;
+        ct.rxSocket = receive_sock;
+        ct.socketaddr_length = slen;
+
+        // Send new data into zcoap-server
+        dispatch(&ct, recv_len, buf);
+
+        printf("CoAP transaction completed!\r\n");
     }
 
-    // cleanup
-    closesocket(ClientSocket);
+    closesocket(receive_sock);
     WSACleanup();
 
     return 0;
 }
-
-

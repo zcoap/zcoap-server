@@ -113,10 +113,10 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
  *
  * This method may be used for coap_fs_gen mount point nodes and their
  * dynamically-generated children.  This may also be used for any static nodes
- * for which the implementer desires DELETE to remove to a local filesystem
+ * for which the implementer desires DEL to remove to a local filesystem
  * resource.  All that's needed to do this is to define a coap_node_t as:
  *
- * const coap_node_t my_node = { .name "my_node_name", .PUT = &coap_fs_DELETE, .metadata = "$LOCAL_FILE_PATH };
+ * const coap_node_t my_node = { .name "my_node_name", .PUT = &coap_fs_DEL, .metadata = "$LOCAL_FILE_PATH };
  */
 void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 {
@@ -137,7 +137,7 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
     } else {
-        coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DELETE));
+        coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DEL));
     }
 }
 
@@ -152,12 +152,12 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
  * To mount a filesystem path into the URI tree, simply define a node in the
  * tree as follows:
  *
- * const coap_node_t my_node = { .name "my_node_name", .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .metadata = "$LOCAL_FILE_PATH" };
+ * const coap_node_t my_node = { .name "my_node_name", .GET = &coap_fs_get, .PUT = &coap_fs_put, .DEL = &coap_fs_delete, .metadata = "$LOCAL_FILE_PATH" };
  *
  * Methods defined at the static originator node (my_node in this example) are
  * copied to dynamically-genereated children, thus imparting privileges from
  * the static originator parent.  The parent may provide any combination of
- * the GET, PUT and DELETE methods.  The coap_fs_xxx helper methods are
+ * the GET, PUT and DEL methods.  The coap_fs_xxx helper methods are
  * provided for this purpose.  However, an implementation may define its own
  * methods as well.  This is not difficult, as coap_fs_gen will enclose the
  * filesystem path in node->metadato for all recursively-generated children.
@@ -167,7 +167,11 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2)))
+#endif
+coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!parent || !recursor || !parent->metadata) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -198,7 +202,7 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
         child_path[parent_path_len] = '/';
         memcpy(&child_path[parent_path_len + 1], entry->d_name, entry_len);
         child_path[child_path_len] = '\0';
-        coap_node_t child = { .name = entry->d_name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DELETE = parent->DELETE, .gen = &coap_fs_gen, .metadata = child_path };
+        coap_node_t child = { .name = entry->d_name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DEL = parent->DELETE, .gen = &coap_fs_gen, .metadata = child_path };
         if ((rc = (*recursor)(&child, recursor_data))) {
             goto coap_fs_gen_out;
         }

@@ -12,6 +12,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include "config.h"
 
 typedef enum coap_type_e {
@@ -32,11 +33,11 @@ enum {
     COAP_REQ_METHOD_GET = 1,
     COAP_REQ_METHOD_POST = 2,
     COAP_REQ_METHOD_PUT = 3,
-    COAP_REQ_METHOD_DELETE = 4,
+    COAP_REQ_METHOD_DEL = 4,
 };
 
 enum {
-    COAP_SUCCESS_DELETE = 2,
+    COAP_SUCCESS_DEL = 2,
     COAP_SUCCESS_VALID = 3,
     COAP_SUCCESS_CHANGED = 4,
     COAP_SUCCESS_CONTENT = 5,
@@ -370,11 +371,11 @@ typedef coap_code_t (*coap_recurse_t)(const coap_node_t* const node, const void*
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 if the server should keep iterating, else an appropriate CoAP code
  */
+typedef coap_code_t
 #ifdef __GNUC__
-typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_gen_t)(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data);
-#else
-typedef coap_code_t (*coap_gen_t)(const coap_node_t* const parent, coap_recurse_t recursor, const void* recursor_data);
+__attribute__((nonnull (1, 2)))
 #endif
+(*coap_gen_t)(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data);
 
 /**
  * coap_wildcard_t
@@ -394,8 +395,11 @@ typedef coap_code_t (*coap_gen_t)(const coap_node_t* const parent, coap_recurse_
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 if the server should keep iterating, else an appropriate CoAP code
  */
-typedef coap_code_t __attribute__((nonnull (1, 2, 3))) (*coap_wildcard_t)(const coap_node_t * const parent, const char *child, coap_recurse_t recursor, const void *recursor_data);
->>>>>>> fbffe17... This commit further refactors example-server-linux.fs.c
+typedef coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2, 3)))
+#endif
+(*coap_wildcard_t)(const coap_node_t * const parent, const char *child, coap_recurse_t recursor, const void *recursor_data);
 
 struct coap_node_s {
     const char *name; // node path segment
@@ -408,7 +412,7 @@ struct coap_node_s {
     coap_handler_t GET; // GET method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_handler_t PUT; // PUT method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_handler_t POST; // POST method pointer; must be NULL or point to a valid zcoap GET method handler
-    coap_handler_t DELETE; // DELETE method pointer; must be NULL or point to a valid zcoap GET method handler
+    coap_handler_t DEL; // DELETE method pointer; must be NULL or point to a valid zcoap GET method handler
     coap_init_t init; // init function to call against the node at system init; called by zcoap-server.c at init if non-null
     coap_validate_t validate; // utility validator for init and PUT/POST; called by zcoap.c PUT/POST utility methods if non-null
     const void *metadata; // node metadata; can be anything as necessary for a node's handlers to understand their context

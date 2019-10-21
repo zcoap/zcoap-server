@@ -11,7 +11,7 @@
 #ifndef ZCOAP_CONFIG_H
 #define ZCOAP_CONFIG_H
 
-#include "<platform.h>
+#include <platform.h>
 
 #ifndef SUPPRESS_ZCOAP_EXTENSIONS
 /**
@@ -37,6 +37,17 @@
  * ZCOAP_MAX_BUF_SIZE
  *
  * Maximum buffer size for incoming ASCII payloads and path segments.
+
+ * Note, this doesn't affect the allowed size of the response buffer.
+ * For example, if the response is a long byte array as you might see
+ * when using COAP_FMT_TEXT or COAP_FMT_XML, we call malloc as needed
+ * for the response buffer.
+ *
+ * If you're on a microcontroller and not using __GNUC__, be aware,
+ * messages will end up creating buffers on the stack of this size for each
+ * level of the coap tree.  So if your tree, at its max, is 6 levels 
+ * deep, your stack should support a buffer allocation
+ * of 6 * ZCOAP_MAX_BUF_SIZE.
  */
 #define ZCOAP_MAX_BUF_SIZE 64
 #endif /* ZCOAP_MAX_BUF_SIZE */
@@ -142,8 +153,8 @@
  * environment, YOU must define locking/unlocking functions.  Else, zcoap
  * uses no-op macros for these.
  */
-#define ZCOAP_LOCK(void) ({ })
-#define ZCOAP_UNLOCK(void) ({ })
+#define ZCOAP_LOCK(void){}
+#define ZCOAP_UNLOCK(void){}
 #endif /* ZCOAP_LOCK */
 
 #ifndef ZCOAP_DOUBLE

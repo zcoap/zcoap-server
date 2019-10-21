@@ -77,11 +77,24 @@ typedef struct flags_s {
     unsigned exp : 2;
 } fmt_flags_t;
 
+#ifdef __GNUC__
+
 #if (__DBL_MANT_DIG__ != __FLT_MANT_DIG__)
 #define zftoa zftoal
 #else
 #define zftoa zftoaf
 #endif
+
+#else
+
+#if (DBL_MANT_DIG != FLT_MANT_DIG)
+#define zftoa zftoal
+#else
+#define zftoa zftoaf
+#endif
+
+#endif
+
 
 static char *zx16toa(char *buf, uint16_t n, unsigned width, fmt_flags_t flags)
 {
@@ -235,7 +248,7 @@ static char *zx64toa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
-#define addSign(_buf, _n, _flags) ({\
+#define addSign(_buf, _n, _flags) {\
     if (_n < 0) {\
         *_buf = '-';\
         ++_buf;\
@@ -246,7 +259,7 @@ static char *zx64toa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
         *_buf = ' ';\
         ++_buf;\
     }\
-})
+}
 
 static char *zi16toa(char *buf, int16_t n, unsigned width, fmt_flags_t flags)
 {

@@ -18,8 +18,8 @@
 //#define ZCOAP_MEMCPY memcpy
 //#define ZCOAP_MEMMOVE memmove
 //#define ZCOAP_MEMSET memset
-//#define ZCOAP_SNPRINTF zsnprintf
-//#define ZCOAP_VSNPRINTF zvsnprintf
+#define ZCOAP_SNPRINTF snprintf
+#define ZCOAP_VSNPRINTF vsnprintf
 
 //Populate these methods if you want the zcoap-server to lock the helper (ie coap_get_int) when accessing the .data reference.
 //#define ZCOAP_LOCK(void) ({ })
@@ -36,7 +36,20 @@
  * Implementation may define a variadic debug function in order to enable debug
  * logging from the Zepto CoAP server.
  */
-//#define ZCOAP_DEBUG(format, args...) fprintf (stderr, format, args)
+#define ZCOAP_DEBUG(format, args) fprintf (stderr, format, args)
 
+
+//This is a fix for some errors when using MSVC:
+//zcoap-server.lib(zcoap-server.c.obj) : 
+//  error LNK2019: unresolved external symbol _strncasecmp referenced in function _coap_parse_req_bool
+//zcoap-server.lib(zsnprintf.c.obj) : 
+//  error LNK2019: unresolved external symbol _isnanl referenced in function _zftoal
+#ifdef _MSC_VER 
+ //not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+//#define isnanl _isnanl
+//#define strcasecmp _stricmp
+#endif
 
 #endif /* ZCOAP_PLATFORM_H */
