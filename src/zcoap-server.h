@@ -81,7 +81,7 @@ enum {
 #define COAP_CODE_MASK_DETAIL ((1U << COAP_CODE_BITS_DETAIL) - 1)
 typedef uint8_t coap_code_t;
 #define COAP_CODE(_class, _detail) ((((_class) & COAP_CODE_MASK_CLASS) << COAP_CODE_BITS_DETAIL) | ((_detail) & COAP_CODE_MASK_DETAIL))
-#define COAP_CODE_TO_CLASS(_code) (((_code) >> COAP_CODE_BITS_CLASS) & COAP_CODE_MASK_CLASS)
+#define COAP_CODE_TO_CLASS(_code) (((_code) >> COAP_CODE_BITS_DETAIL) & COAP_CODE_MASK_CLASS)
 
 enum {
     COAP_OPT_IF_MATCH = 1,
