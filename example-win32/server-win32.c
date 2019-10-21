@@ -22,11 +22,12 @@
 // /telemetry/digits
 // /telemetry/name
 
+//A coap client would send a request, for example to coap://127.0.0.1:5689/.well-known/core
+
 static const coap_node_t* root_children[] = { &wellknown_uri, &telemetry_uri, NULL };
 static const coap_node_t root = { .children = root_children };
 
 //Winsock2 socket resources for application to list on a UDP socket.
-//A coap client would send a request, for example to coap://127.0.0.1:5689/.well-known/core
 SOCKET receive_sock;
 struct sockaddr_in server, si_other;
 int slen, recv_len;

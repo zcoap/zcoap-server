@@ -5,3 +5,4 @@ CMakeFiles/*
 Testing/*
 out/*
 .vs/*
+*.json
