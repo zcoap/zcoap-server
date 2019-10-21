@@ -432,13 +432,19 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
     } while (0);
     const size_t pwdlen = strlen(pdata->pwd);
     const size_t cplen = node->name ? strlen(node->name) : 0;
-
     //Note, Visual Studio's cl.exe doesn't support VLAs!  Annoying.
     //https://stackoverflow.com/questions/5246900/enabling-vlas-variable-length-arrays-in-ms-visual-c
 #ifdef __GNUC__
+    // We do not bounds-check for this stack buffer allocation.  Unlike
+    // situatiions where the client is injecting data of variable length, we
+    // have full control of our tree and path lengths.  Thus we presume that
+    // pwd is of reasonable length and is safe to push on the stack.
     char cpbuf[pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */];
 #else
-    char cpbuf[ZCOAP_MAX_BUF_SIZE];
+    char *cpbuf = ZCOAP_ALLOCA(pwdlen + cplen + 1 /* '/' */ + 1 /* '\0' */);
+    if (cpbuf == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
 #endif // __GNUC__
 
     ZCOAP_MEMCPY(cpbuf, pdata->pwd, pwdlen);
@@ -463,6 +469,9 @@ static coap_code_t iter_wellknown_core(const coap_node_t * const node, const voi
     if (node->gen) {
         (*node->gen)(node, &iter_wellknown_core, &cdata);
     }
+#ifndef __GNUC__
+    ZCOAP_ALLOCA_FREE(cpbuf);
+#endif // __GNUC__
     return 0;
 }
 
@@ -611,7 +620,7 @@ static void stable_sort_opts(const size_t nopts, const coap_opt_t opts[], const 
  * @param buf location to stuff option
  * @return buf advanced past the stuffed option
  */
-static coap_code_t *stuff_option(uint32_t * const acc, uint16_t optnum, uint16_t optlen, const void * const opt, uint8_t *buf)
+static uint8_t *stuff_option(uint32_t * const acc, uint16_t optnum, uint16_t optlen, const void * const opt, uint8_t *buf)
 {
     uint16_t delta = optnum - *acc;
     *acc += delta;
@@ -658,7 +667,7 @@ static coap_code_t *stuff_option(uint32_t * const acc, uint16_t optnum, uint16_t
  * @param opts options to stuff
  * @return buf advanced past stuffed options
  */
-static coap_code_t *stuff_options(uint8_t *buf, size_t nopts, const coap_opt_t opts[])
+static uint8_t *stuff_options(uint8_t *buf, size_t nopts, const coap_opt_t opts[])
 {
     // As awkward as it is, we must pre-sort our options in order to build a
     // CoAP options payload.  Option-number-delta is unsigned, so option numbers
@@ -668,9 +677,21 @@ static coap_code_t *stuff_options(uint8_t *buf, size_t nopts, const coap_opt_t o
     // To ensure robustness, this function preforms the sort itself.
 
 #ifdef __GNUC__
-    const coap_opt_t *sorted[nopts]; // allocate temp pointer array on the stack
+    // Allocate a temp pointer array on the stack.  This is for an outgoing
+    // message, not an incoming message.  Thus we are not concerned about
+    // a client injecting data that will lead to our stack overflow - we are
+    // in full control of this message and are confident the options array
+    // is of reasonable size.  Thus we do not bounds check.
+    const coap_opt_t *sorted[nopts];
 #else
-    const coap_opt_t *sorted[ZCOAP_MAX_BUF_SIZE];
+    // Non-C99 platforms don't permit a variable-length array.  So we must
+    // statically allocate and must choose some reasonable limit.  If our
+    // outgoing message exceeds this limit, we must simply issue an error
+    // response.
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        return NULL;
+    }
+    const coap_opt_t *sorted[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
     stable_sort_opts(nopts, opts, sorted);
@@ -697,9 +718,12 @@ static size_t opt_sec_len(const size_t nopts, const coap_opt_t opts[])
     // To ensure robustness, this function preforms the sort itself.
 
 #ifdef __GNUC__
-    const coap_opt_t* sorted[nopts]; // allocate temp pointer array on the stack
+    const coap_opt_t *sorted[nopts]; // allocate temp pointer array on the stack
 #else
-    const coap_opt_t* sorted[ZCOAP_MAX_BUF_SIZE];
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        return NULL;
+    }
+    const coap_opt_t *sorted[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
     stable_sort_opts(nopts, opts, sorted);
@@ -930,7 +954,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, const size_t nopts, cons
  */
 void
 #ifdef __GNUC__
-__attribute__((nonnull (1))) 
+__attribute__((nonnull (1)))
 #endif
 coap_content_rsp(coap_req_data_t* const req, const coap_code_t code, coap_ct_t ct, const size_t pl_len, const void* const payload)
 {
@@ -1296,9 +1320,11 @@ coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_o
     if (opts == NULL) {
 
 #ifdef __GNUC__
-        const coap_msg_opt_t* lopts[nopts]; // allocate temp pointer array on the stack
+        coap_msg_opt_t lopts[nopts]; // allocate temp pointer array on the stack
 #else
-        const coap_msg_opt_t* lopts[ZCOAP_MAX_BUF_SIZE];
+        // coap_count_opts bounds checks nopts for us - nopts will fit
+        // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
+        coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
         if ((rc = coap_get_opts(req, nopts, lopts))) {
@@ -1605,8 +1631,10 @@ _iter_req(const coap_node_t* const node, const void* data)
     }
     const size_t count = coap_count_children(node);
     const coap_msg_opt_t *opt = &cdata->path_opts[0];
-    if (count && opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
-        
+    // We bounds check for ZCOAP_MAX_BUF_SIZE and skip path segments that are
+    // too large.  We can't allow clients to inject data that will grow our
+    // stack unreasonably.
+    if (count && opt->len < ZCOAP_MAX_BUF_SIZE) {
 #ifdef __GNUC__
         char keyname[opt->len + 1];
 #else
@@ -1632,7 +1660,10 @@ _iter_req(const coap_node_t* const node, const void* data)
     }
     if (node->wildcard) { // if no children matched, but the parent has wildcard set, recurse into the wildcard function
         const coap_msg_opt_t *opt = &cdata->path_opts[0];
-        if (opt->len < ZCOAP_MAX_BUF_SIZE) { // skip path segments that are too large
+        // We bounds check for ZCOAP_MAX_BUF_SIZE and skip path segments that are
+        // too large.  We can't allow clients to inject data that will grow our
+        // stack unreasonably.
+        if (opt->len < ZCOAP_MAX_BUF_SIZE) {
 
 #ifdef __GNUC__
             char child[opt->len + 1];
@@ -1650,14 +1681,17 @@ _iter_req(const coap_node_t* const node, const void* data)
     }
     #ifdef ZCOAP_DEBUG
     {
+        // CoAP path options are text, but are not terminated with '\0'.
+        // Copy to a stack buffer and NULL-terminate.
+        size_t debug_str_len = opt->len < ZCOAP_MAX_BUF_SIZE ? opt->len : ZCOAP_MAX_BUF_SIZE - 1;
 #ifdef __GNUC__
-        char buf[opt->len + 1];
+        char buf[debug_str_len + 1];
 #else
         char buf[ZCOAP_MAX_BUF_SIZE];
 #endif // __GNUC__
 
-        ZCOAP_MEMCPY(buf, opt->val, opt->len);
-        buf[opt->len] = '\0';
+        ZCOAP_MEMCPY(buf, opt->val, debug_str_len);
+        buf[debug_str_len] = '\0';
         ZCOAP_DEBUG("%s: unable to resolve request path '%s'!\n", __func__, buf);
     }
     #endif
@@ -1741,7 +1775,9 @@ inject_coap_req(coap_req_data_t* const req, const coap_node_t* const root)
 #ifdef __GNUC__
     coap_msg_opt_t opts[nopts];
 #else
-    coap_msg_opt_t opts[ZCOAP_MAX_BUF_SIZE];
+    // coap_count_opts bounds checks nopts for us - nopts will fit
+    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
+    coap_msg_opt_t opts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
     if ((rc = coap_get_opts(req, nopts, opts))) {
@@ -1931,11 +1967,12 @@ coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_o
         *nqueryopts = 0;
         return 0;
     }
-
 #ifdef __GNUC__
     coap_msg_opt_t lopts[nopts];
 #else
-    coap_msg_opt_t lopts[ZCOAP_MAX_BUF_SIZE];
+    // coap_count_opts bounds checks nopts for us - nopts will fit
+    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
+    coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
     if (opts == NULL) {
@@ -2003,11 +2040,13 @@ coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt
     if (nqueryopts > nopts) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
-    
+
 #ifdef __GNUC__
     coap_msg_opt_t lopts[nopts];
 #else
-    coap_msg_opt_t lopts[ZCOAP_MAX_BUF_SIZE];
+    // coap_count_opts bounds checks nopts for us - nopts will fit
+    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
+    coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
     if (opts == NULL) {
@@ -2081,7 +2120,9 @@ coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t op
 #ifdef __GNUC__
         coap_msg_opt_t lopts[nopts];
 #else
-        coap_msg_opt_t lopts[ZCOAP_MAX_BUF_SIZE];
+        // coap_count_opts bounds checks nopts for us - nopts will fit
+        // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
+        coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif // __GNUC__
 
         if ((rc = coap_get_opts(req, nopts, lopts))) {
@@ -2177,6 +2218,8 @@ coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t op
  */
 int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long long * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
@@ -2279,10 +2322,12 @@ int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long 
  */
 int coap_parse_llong(const void * const ascii, const size_t len, long long * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
-    
+
 #ifdef __GNUC__
     char buf[len + 1];
 #else
@@ -2410,6 +2455,8 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
  */
 int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
@@ -2511,6 +2558,8 @@ int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long *
  */
 int coap_parse_long(const void * const ascii, const size_t len, long * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
@@ -2677,6 +2726,8 @@ int coap_parse_int(const void * const ascii, const size_t len, int * const out)
  */
 int coap_parse_float(const void * const ascii, const size_t len, float * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
@@ -2756,6 +2807,8 @@ int coap_parse_float(const void * const ascii, const size_t len, float * const o
  */
 int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE * const out)
 {
+    // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
+    // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
         return ENOMEM;
     }
@@ -3758,17 +3811,26 @@ void coap_printf(coap_req_data_t * const req, const char *fmt, ...)
         va_end(ap);
     }
     {
-
 #ifdef __GNUC__
+       // We do not bounds-check for this stack buffer allocation.  Unlike
+       // situatiions where the client is injecting data of variable length, we
+       // have full control of what we print.  Thus we assume that what we are
+       // printing is of reasonable length and safe to push on the stack.
         char buf[len + 1];
 #else
-        char buf[ZCOAP_MAX_BUF_SIZE];
+        char *buf = ZCOAP_ALLOCA(len + 1);
+        if (buf == NULL) {
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+            return;
+        }
 #endif // __GNUC__
-
         va_start(ap, fmt);
         len = ZCOAP_VSNPRINTF(buf, sizeof(buf), fmt, ap);
         va_end(ap);
         coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_TEXT, len, buf);
+#ifndef __GNUC__
+        ZCOAP_ALLOCA_FREE(buf);
+#endif // __GNUC__
     }
 }
 
@@ -4286,14 +4348,24 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
         size_t len = strlen(str);
 
 #ifdef __GNUC__
+       // We do not bounds-check for this stack buffer allocation.  Unlike
+       // situatiions where the client is injecting data of variable length, we
+       // have full control of what we print.  Thus we assume that what we are
+       // printing is of reasonable length and safe to push on the stack.
         char buf[len + 1];
 #else
-        char buf[ZCOAP_MAX_BUF_SIZE];
+        char *buf = ZCOAP_ALLOCA(len + 1);
+        if (buf == NULL) {
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+            return;
+        }
 #endif // __GNUC__
-
         memcpy(buf, str, len + 1);
         ZCOAP_UNLOCK();
         coap_printf(req, "%s", buf);
+#ifndef __GNUC__
+        ZCOAP_ALLOCA_FREE(buf);
+#endif // __GNUC__
     }
 }
 
