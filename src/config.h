@@ -92,6 +92,9 @@
  */
 #define ZCOAP_ALLOCA ZCOAP_MALLOC
 #define ZCOAP_ALLOCA_FREE ZCOAP_FREE
+#else
+/* If we have a real alloca, we don't need a symmetric free. Thus, no-op. */
+#define ZCOAP_ALLOCA_FREE(_buf)
 #endif
 
 #ifndef ZCOAP_MEMCPY

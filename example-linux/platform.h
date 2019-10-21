@@ -10,9 +10,9 @@
 #ifndef ZCOAP_PLATFORM_H
 #define ZCOAP_PLATFORM_H
 
-//#define ZCOAP_MAX_BUF_SIZE 64
-//#define ZCOAP_MAX_PAYLOAD_OPTS 32
-//#define ZCOAP_ALLOCA alloca
+#define ZCOAP_MAX_BUF_SIZE 256
+#define ZCOAP_MAX_PAYLOAD_OPTS 64
+#define ZCOAP_ALLOCA alloca /* alloca can give us a big speed up in coap_rsp; for partability, zcoap-server doesn't use it by default, but we have it and should use it. */
 //#define ZCOAP_MALLOC malloc
 //#define ZCOAP_CALLOC calloc
 //#define ZCOAP_REALLOC realloc
