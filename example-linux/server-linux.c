@@ -61,7 +61,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
         error("socket write error on respond");
     }
 
-     printf("Sent %d bytes back to client!", sent);
+     printf("Sent %ld bytes back to client!\n", sent);
      fflush( stdout );
 }
 
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
             error("recvfrom error - client source address information is truncated");
         }
 
-        printf("Received %d bytes, sending to zcoap-server", received);
+        printf("Received %ld bytes, sending to zcoap-server\n", received);
         fflush( stdout );
 
         //Send request into zcoap-server library
