@@ -4356,7 +4356,7 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
 #else
         char *buf = ZCOAP_ALLOCA(len + 1);
         if (buf == NULL) {
-            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
             return;
         }
 #endif // __GNUC__
