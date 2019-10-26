@@ -3807,6 +3807,8 @@ void coap_printf(coap_req_data_t * const req, const char *fmt, ...)
     size_t len;
     {
         va_start(ap, fmt);
+        //Use snprintf to print to nothing but give us the length we need.
+        //This lookse expenseive, but malloc is often worse in this case on many microcontrollers.
         len = ZCOAP_VSNPRINTF(NULL, 0, fmt, ap);
         va_end(ap);
     }
@@ -3825,7 +3827,10 @@ void coap_printf(coap_req_data_t * const req, const char *fmt, ...)
         }
 #endif // __GNUC__
         va_start(ap, fmt);
-        len = ZCOAP_VSNPRINTF(buf, sizeof(buf), fmt, ap);
+
+        //Now actually write to the buffer, now that we know the desired length.
+        len = ZCOAP_VSNPRINTF(buf, len + 1, fmt, ap);
+
         va_end(ap);
         coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_TEXT, len, buf);
 #ifndef __GNUC__

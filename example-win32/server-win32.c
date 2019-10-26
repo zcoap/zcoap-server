@@ -60,11 +60,15 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
 {
     const struct CoapTransaction_t *ct = req->route;
 
-    printf("    Coap Response - id = %d, code detail = %d, code class = %d, type = %d\n", rsp->msg_ID, rsp->code.code_detail, 
-                                                                                        rsp->code.code_class, rsp->type);
+    printf("    Coap Response - id = %d, code detail = %d, code class = %d, type = %d, len = %d\n",
+        rsp->msg_ID, rsp->code.code_detail, 
+        rsp->code.code_class, rsp->type,
+        len);
     
     //Send coap response to sender
-    int send_result = sendto(ct->rxSocket, rsp, len, 0, (struct sockaddr*)ct->rxAddress, ct->socketaddr_length);
+    int send_result = sendto(ct->rxSocket, rsp, len, 0, 
+        (struct sockaddr*)ct->rxAddress, 
+        ct->socketaddr_length);
 
     if (send_result == SOCKET_ERROR){
         printf("send failed with error: %d\n", WSAGetLastError());
@@ -157,7 +161,7 @@ int main()
         printf("Received packet from % s: % d\n " , inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
         printf("Data: % s\n ", buf);
 
-        printf("Sending to zcoap-server...");
+        printf("Sending to zcoap-server...\n");
 
         //coap_transaction is just a struct we use to keep track of the transaction as we
         //pass the data into zcoap-server.  We need this data so that the response function
