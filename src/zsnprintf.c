@@ -705,11 +705,11 @@ static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_flags_t flags)
 {
     if (!isfinite(f)) {
-        if (isnanf(f)) {
+        if (isnan(f)) {
             memcpy(buf, "NAN", sizeof("NAN"));
             buf += strlen(buf);
             return buf;
-        } else if (isinff(f) == -1) {
+        } else if (isinf(f) == -1) {
             memcpy(buf, "-INF", sizeof("-INF"));
             buf += strlen(buf);
             return buf;
@@ -805,12 +805,12 @@ static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_
 static char *zftoal(char *buf, long double f, unsigned width, unsigned precision, fmt_flags_t flags)
 {
     if (!isfinite(f)) {
-        if (isnanl(f)) {
+        if (isnan(f)) {
             memcpy(buf, "NAN", sizeof("NAN"));
             buf += strlen(buf);
             return buf;
         }
-        if (isinfl(f) == -1) {
+        if (isinf(f) == -1) {
             memcpy(buf, "-INF", sizeof("-INF"));
             buf += strlen(buf);
             return buf;
