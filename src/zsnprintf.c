@@ -671,6 +671,150 @@ static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
     return buf;
 }
 
+/**
+ * Reverse the characters in the passed buffer.
+ *
+ * @param buf (in/out) buffer of characters to reverse
+ * @param end index of the last character in the passed buffer to reverse
+ */
+static inline void reverse(char *buf, unsigned end)
+{
+    unsigned start = 0;
+    while (start < end) {
+        char temp = buf[start];
+        buf[start] = buf[end];
+        buf[end] = temp;
+        ++start;
+        --end;
+    }
+}
+
+/**
+ * Print a signed radix decimal 64-bit integer.  The caller is responsible for
+ * ensuring the buffer is large enough.
+ *
+ * This isn't heavily optimized like our 16 and 32-bit functions, but it works.
+ * Since this isn't heavily optimized, we call into our 32-bit function instead
+ * for integers that will fit into that.
+ *
+ * @param buf buffer to print to
+ * @param n integer to print
+ * @param width 1-based width for printf (e.g. %4lld)
+ * @param flags flags optionally specifying printf-style 0-pad (e.g. %04lld)
+ * @return pointer to next character in the printed buffer
+ */
+static char *zi64toa(char *buf, int64_t n, unsigned width, fmt_flags_t flags)
+{
+    if (n >= INT32_MIN && n <= INT32_MAX) {
+        return zi32toa(buf, n, width, flags);
+    }
+    unsigned first_digit = 0;
+    char tmp[19];
+    if (n == 0) {
+        tmp[first_digit] = '0';
+    } else {
+        uint64_t _n;
+        if (n < 0) {
+            _n = -n;
+        } else {
+            _n = n;
+        }
+        while (_n) {
+            int rem = _n % 10;
+            tmp[first_digit] = rem + '0';
+            _n = _n / 10;
+            ++first_digit;
+        }
+        --first_digit;
+    }
+    reverse(tmp, first_digit);
+    if (width) {
+        // width is 1-based; change to 0-based
+        if (width > 19) {
+            width = 19;
+        } else {
+            --width;
+        }
+        if (flags.zeropad) {
+            addSign(buf, n, flags);
+            for (unsigned i = width; i > first_digit; --i) {
+                *buf = '0';
+                ++buf;
+            }
+        } else {
+            for (unsigned i = width; i > first_digit; --i) {
+                *buf = ' ';
+                ++buf;
+            }
+            addSign(buf, n, flags);
+        }
+    } else {
+        addSign(buf, n, flags);
+    }
+    memcpy(buf, tmp, first_digit + 1);
+    buf += first_digit + 1;
+    *buf = '\0';
+    return buf;
+}
+
+/**
+ * Print an unsigned radix decimal 64-bit integer.  The caller is responsible
+ * for ensuring the buffer is large enough.
+ *
+ * This isn't heavily optimized like our 16 and 32-bit functions, but it works.
+ * Since this isn't heavily optimized, we call into our 32-bit function instead
+ * for integers that will fit into that.
+ *
+ * @param buf buffer to print to
+ * @param n integer to print
+ * @param width 1-based width for printf (e.g. %4llu)
+ * @param flags flags optionally specifying printf-style 0-pad (e.g. %04llu)
+ * @return pointer to next character in the printed buffer
+ */
+static char *zu64toa(char *buf, uint64_t n, unsigned width, fmt_flags_t flags)
+{
+    if (n <= UINT32_MAX) {
+        return zu32toa(buf, n, width, flags);
+    }
+    unsigned first_digit = 0;
+    char tmp[20];
+    if (n == 0) {
+        tmp[first_digit] = '0';
+    } else {
+        while (n) {
+            int rem = n % 10;
+            tmp[first_digit] = rem + '0';
+            n = n / 10;
+            ++first_digit;
+        }
+        --first_digit;
+    }
+    reverse(tmp, first_digit);
+    if (width) {
+        // width is 1-based; change to 0-based
+        if (width > 20) {
+            width = 20;
+        } else {
+            --width;
+        }
+        if (flags.zeropad) {
+            for (unsigned i = width; i > first_digit; --i) {
+                *buf = '0';
+                ++buf;
+            }
+        } else {
+            for (unsigned i = width; i > first_digit; --i) {
+                *buf = ' ';
+                ++buf;
+            }
+        }
+    }
+    memcpy(buf, tmp, first_digit + 1);
+    buf += first_digit + 1;
+    *buf = '\0';
+    return buf;
+}
+
 #if UINT_MAX == UINT16_MAX
 #define zxtoa zx16toa
 #define zitoa zi16toa
@@ -681,8 +825,8 @@ static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 #define zutoa zu32toa
 #elif UINT_MAX == UINT64_MAX
 #define zxtoa zx64toa
-#define zitoa zx64toa /* TODO: int64 decimal printing */
-#define zutoa zx64toa /* TODO: uint64 decimal printing */
+#define zitoa zi64toa
+#define zutoa zu64toa
 #else
 #error UINT_MAX unsupported
 #endif
@@ -692,14 +836,14 @@ static char *zu32toa(char *buf, uint32_t n, unsigned width, fmt_flags_t flags)
 #define zultoa zu32toa
 #elif ULONG_MAX == UINT64_MAX
 #define zlxtoa zx64toa
-#define zltoa zx64toa /* TODO: int64 decimal printing */
-#define zultoa zx64toa /* TODO: uint64 decimal printing */
+#define zltoa zi64toa
+#define zultoa zu64toa
 #else
 #error ULONG_MAX unsupported
 #endif
 #define zllxtoa zx64toa
-#define zlltoa zx64toa /* TODO: int64 decimal printing */
-#define zulltoa zx64toa /* TODO: uint64 decimal printing */
+#define zlltoa zi64toa
+#define zulltoa zu64toa
 
 // WARNING: saturates to INT32_MIN/INT32_MAX; fraction limited to 4 digits
 static char *zftoaf(char *buf, float f, unsigned width, unsigned precision, fmt_flags_t flags)
