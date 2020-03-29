@@ -2,7 +2,7 @@
  * File:   zsnprintf.h
  * Author: Michael Sandstedt
  *
- * An snprintf that doesn't suck.  Not full-featured, but not broken either...
+ * An snprintf that doesn't suck.  Fairly full-featured, fast and safe.
  * This was made to work around problems in the Microchip XC16 compiler when
  * targeting DSPIC33 parts.
  *
