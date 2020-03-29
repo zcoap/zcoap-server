@@ -26,7 +26,6 @@
 //#define ZCOAP_UNLOCK(void) ({ })
 
 //#define ZCOAP_DOUBLE double
-//#define SUPPRESS_ZCOAP_EXTENSIONS
 //#define ZCOAP_HTONL htonl
 //#define ZCOAP_HTONS htons
 //#define ZCOAP_NTOHL ntohl

@@ -1313,6 +1313,12 @@ size_t zvsnprintf(char *buf, size_t n, const char *fmt, va_list ap)
     return len;
 }
 
+/**
+ * @param buf
+ * @param n
+ * @param fmt
+ * @param ...
+ */
 size_t zsnprintf(char *buf, size_t n, const char *fmt, ...)
 {
     va_list ap;

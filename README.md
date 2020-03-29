@@ -136,7 +136,6 @@ static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t
 * The library makes no assumptions on crypto support for your microcontroller, as the RFC intends, this means there is no TLS/DTLS support built in.
 * The library does not assume you have threading (such as pthread).  The thread you call coap_rx() on is the thread which generates and calls the coap_udp_respond() response function.
 * You can define your own ZCOAP_LOCK and ZCOAP_UNLOCK to make the code work in multi-threaded enviroments.  But this is only needed when you are using the built-in response funcations such as, for example coap_get_int().  When you define your own GET/PUT functions you need to keep threading in mind and lock resources as needed.
-* The library provides format extensions which we will be trying to make a formal part of the specification as more reserved Content-Format registry types (section 12.3) are decided on.  In much the same way that CBOR [RFC 7049](https://tools.ietf.org/html/rfc7049) might one day be a standard content format, we believe there should be wire formats for standardized binary wire types like "int32" or "double."  To this end, feel free to use binary wire types found in ZCOAP_EXTENSIONS.  There is a way to disable our custom types by defining SUPPRESS_ZCOAP_EXTENSIONS in platform.h.
 * The library does not allow a client to observe resources per [RFC 7641](https://tools.ietf.org/html/rfc7641).  Hopfully progress on this will be made in the future.
 
 # Configuration Switches

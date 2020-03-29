@@ -51,16 +51,6 @@ enum {
     COAP_CLIENT_ERR_NOT_FOUND = 4,
     COAP_CLIENT_ERR_METHOD_NOT_ALLOWED = 5,
     COAP_CLIENT_ERR_NO_ACCEPT = 6,
-    #ifdef ZCOAP_EXTENSIONS
-    // Client error code 409, Conflict
-    //
-    // This is a non-RFC-7252 error code taken from HTTP.  ZCoAP server can
-    // use this code to reflect conditions to clients whereby requested actions
-    // cannot be completed due to preexisting state or subsequent requests that
-    // conflict with the client request for which the error response is
-    // returned.
-    COAP_CLIENT_ERR_CONFLICT = 9,
-    #endif /* ZCOAP_EXTENSIONS */
     COAP_CLIENT_ERR_PRECOND_FAILED = 12,
     COAP_CLIENT_ERR_REQ_TOO_LARGE = 13,
     COAP_CLIENT_ERR_CONTENT_FMT = 15,
@@ -102,24 +92,54 @@ enum {
 };
 
 typedef enum coap_content_format_e {
+    // See registry here: https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#content-formats
     COAP_FMT_TEXT = 0,
+    COAP_FMT_COSE_ENCRYPT0 = 16,
+    COAP_FMT_COSE_MAC0 = 17,
+    COAP_FMT_COSE_SIGN1 = 18,
     COAP_FMT_LINK = 40,
     COAP_FMT_XML = 41,
     COAP_FMT_STREAM = 42,
     COAP_FMT_EXI = 47,
     COAP_FMT_JSON = 50,
-    #ifdef ZCOAP_EXTENSIONS
-    ZCOAP_FMT_AUTO = 72,
-    ZCOAP_FMT_BOOL,
-    ZCOAP_FMT_U16,
-    ZCOAP_FMT_U32,
-    ZCOAP_FMT_U64,
-    ZCOAP_FMT_I16,
-    ZCOAP_FMT_I32,
-    ZCOAP_FMT_I64,
-    ZCOAP_FMT_FLOAT,
-    ZCOAP_FMT_DOUBLE,
-    #endif /* ZCOAP_EXTENSIONS */
+    COAP_FMT_JSON_PATCH = 51,
+    COAP_FMT_JSON_MERGE_PATCH = 52,
+    COAP_FMT_CBOR = 60,
+    COAP_FMT_CWT = 61,
+    COAP_FMT_MULTIPART_CORE = 62,
+    COAP_FMT_CBOR_SEQ = 63,
+    COAP_FMT_COSE_ENCRYPT = 96,
+    COAP_FMT_COSE_MAC = 97,
+    COAP_FMT_COSE_SIGN = 98,
+    COAP_FMT_COSE_KEY = 101,
+    COAP_FMT_COSE_KEY_SET = 102,
+    COAP_FMT_SENML_JSON = 110,
+    COAP_FMT_SENSML_JSON = 111,
+    COAP_FMT_SENML_CBOR = 112,
+    COAP_FMT_SENSML_CBOR = 113,
+    COAP_FMT_SENML_EXI = 114,
+    COAP_FMT_SENSML_EXI = 115,
+    COAP_FMT_COAP_GROUP_JSON = 256,
+    COAP_FMT_DOTS_CBOR = 271,
+    COAP_FMT_PKCS7_MIME_SMIME_TYPE_SERVER_GENERATED_KEY = 280,
+    COAP_FMT_PKCS7_MIME_SMIME_TYPE_CERTS_ONLY = 281,
+    COAP_FMT_PKCS7_MIME_SMIME_TYPE_CMD_REQUEST = 282,
+    COAP_FMT_PKCS7_MIME_SMIME_TYPE_CMC_RESPONSE = 283,
+    COAP_FMT_PKCS8 = 284,
+    COAP_FMT_CSRATTRS = 285,
+    COAP_FMT_PKCS10 = 286,
+    COAP_FMT_PKIX_CERT = 287,
+    COAP_FMT_SENML_XML = 310,
+    COAP_FMT_SENSML_XML = 311,
+    COAP_FMT_SENML_ETCH_JSON = 320,
+    COAP_FMT_SENML_ETCH_CBOR = 322,
+    COAP_FMT_TD_JSON = 432,
+    COAP_FMT_VND_OCF_CBOR = 10000,
+    COAP_FMT_OSCORE = 10001,
+    COAP_FMT_JSON_DEFLATE = 11050,
+    COAP_FMT_CBOR_DEFLATE = 11060,
+    COAP_FMT_VND_OMA_LWM2M_TLV = 11542,
+    COAP_FMT_VND_OMA_LWM2M_JSON = 11543,
     // Per RFC7252, identifiers between 65000 and 65535 are reserved
     // for experiments and forbidden for inclusion on the wire as CoAP
     // Content Format options.  Thus, it is safe for us to use 65534
@@ -143,20 +163,8 @@ typedef union ct_mask_s {
         uint32_t ct_ostream : 1;
         uint32_t ct_exi : 1;
         uint32_t ct_json : 1;
-        #ifdef ZCOAP_EXTENSIONS
-        uint32_t ct_bool : 1;
-        uint32_t ct_u16 : 1;
-        uint32_t ct_u32 : 1;
-        uint32_t ct_u64 : 1;
-        uint32_t ct_i16 : 1;
-        uint32_t ct_i32 : 1;
-        uint32_t ct_i64 : 1;
-        uint32_t ct_float : 1;
-        uint32_t ct_double : 1;
-        uint32_t rsv : 1;
-        #else
-        uint32_t rsv : 10;
-        #endif
+        uint32_t ct_cbor : 1;
+        uint32_t rsv : 9;
         uint32_t literal_set : 1;
     };
     coap_ct_t ct_literal;
@@ -426,11 +434,8 @@ struct coap_node_s {
 // truthiness.  That only occurs, however, with a client content format request
 // mismatch.
 typedef uint8_t zcoap_bool_t;
-#define ZCOAP_TRUE ((zcoap_bool_t)1)
-#define ZCOAP_FALSE ((zcoap_bool_t)0)
 #define ZCOAP_TRUE_STR "true"
 #define ZCOAP_FALSE_STR "false"
-#define TO_ZCOAP_BOOL(_b) ((_b) ? ZCOAP_TRUE : ZCOAP_FALSE)
 
 #ifdef __GNUC__
 extern coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t *ct);
@@ -443,9 +448,7 @@ extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_cod
 extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
 extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
-
 #else
-
 extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
 extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, uint32_t* size1);
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
@@ -457,14 +460,13 @@ extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const
 extern void coap_content_rsp(coap_req_data_t* req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void* payload);
 extern void coap_status_rsp(coap_req_data_t* req, coap_code_t code);
 extern void coap_detail_rsp(coap_req_data_t* req, coap_code_t code, const char* detail);
-
-#endif
+#endif /* __GNUC__ */
 
 #ifdef __GNUC__
 extern void coap_printf(coap_req_data_t *req, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
 #else
 extern void coap_printf(coap_req_data_t* req, const char* fmt, ...);
-#endif
+#endif /* __GNUC__ */
 
 extern void coap_return_bool(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool val);
 extern void coap_return_u16(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint16_t val);
@@ -518,8 +520,6 @@ extern void coap_put_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 
 #if INT_MAX == INT16_MAX
-#define ZCOAP_FMT_INT ZCOAP_FMT_I16
-#define ZCOAP_FMT_UINT ZCOAP_FMT_U16
 #define coap_return_uint coap_return_u16
 #define coap_return_int coap_return_i16
 #define coap_get_uint coap_get_u16
@@ -529,8 +529,6 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #define coap_put_uint coap_put_u16
 #define coap_put_int coap_put_i16
 #elif INT_MAX == INT32_MAX
-#define ZCOAP_FMT_INT ZCOAP_FMT_I32
-#define ZCOAP_FMT_UINT ZCOAP_FMT_U32
 #define coap_return_uint coap_return_u32
 #define coap_return_int coap_return_i32
 #define coap_get_uint coap_get_u32
@@ -540,8 +538,6 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #define coap_put_uint coap_put_u32
 #define coap_put_int coap_put_i32
 #elif INT_MAX == INT64_MAX
-#define ZCOAP_FMT_INT ZCOAP_FMT_I64
-#define ZCOAP_FMT_UINT ZCOAP_FMT_U64
 #define coap_return_uint coap_return_u64
 #define coap_return_int coap_return_i64
 #define coap_get_uint coap_get_u64

@@ -13,25 +13,6 @@
 
 #include <platform.h>
 
-#ifndef SUPPRESS_ZCOAP_EXTENSIONS
-/**
- * ZCOAP_EXTENSIONS
- *
- * Zdefines additional binary line formats to provide a more strongly
- * typed client/server interface and to eliminate the expense of
- * text-to-numerical and numerical-to-text conversions where possible.
- *
- * If ZCOAP_EXTENSIONS is defined, the server will provide this
- * additonal functionality.  Note that these wire formats consume
- * currently-free designations in the 0-255 content format type designator
- * space, which (per RFC7252) has been designated as reserved space for
- * which registration procedure is 'expert review'.
- *
- * TODO: move to 10,000+, register with IANA
- */
-#define ZCOAP_EXTENSIONS
-#endif /* SUPPRESS_ZCOAP_EXTENSIONS */
-
 #ifndef ZCOAP_MAX_BUF_SIZE
 /**
  * ZCOAP_MAX_BUF_SIZE

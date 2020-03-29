@@ -28,7 +28,6 @@
 //#define ZCOAP_UNLOCK(void) ({ })
 
 //#define ZCOAP_DOUBLE double
-//#define SUPPRESS_ZCOAP_EXTENSIONS
 
 /**
  * Implementation may define a variadic debug function in order to enable debug
