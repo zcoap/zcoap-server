@@ -4385,7 +4385,7 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
  * @param opts request options array
  * @param node server URI tree node
  */
-void coap_get_bool( ZCOAP_METHOD_SIGNATURE)
+void coap_get_bool(ZCOAP_METHOD_SIGNATURE)
 {
 #ifdef ZCOAP_EXTENSIONS
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_BOOL, ZCOAP_FMT_SENTINEL);
