@@ -1,7 +1,7 @@
 /*
  * File:   platform.h
 
- * Define platform overrides for the Zepto CoAP server here.  Else, defaults
+ * Define platform overrides for the ZCoAP server here.  Else, defaults
  * in config.h are used.
  */
 
@@ -33,7 +33,7 @@
 
 /**
  * Implementation may define a variadic debug function in order to enable debug
- * logging from the Zepto CoAP server.
+ * logging from the ZCoAP server.
  */
 #define ZCOAP_DEBUG(format, args) fprintf (stderr, format, args)
 

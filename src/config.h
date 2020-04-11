@@ -191,4 +191,42 @@
 
 #endif /* ZCOAP_DOUBLE */
 
+#ifndef ZCOAP_SUB_ID_BITS
+/**
+ * The ZCoAP server supports a predefined number of subscriptions per client
+ * response route.  This is because we must correlate confirmable observation
+ * response ACKs to subscriptions based solely upon client route  and ACK
+ * message ID.  To do so, we use some of the message ID bits to map ACks to
+ * per-route subscriptions.  The number of bits we allocate for this purpose
+ * determine the number of subscriptions-per-route we can support.  The
+ * remaining bits are used for per-subscription windowing.  The more bits we
+ * have for per-subscription windowing, the more simultaneious in-flight
+ * responses we can support in each subscription transaction window.
+ *
+ * Our typical usage is UDP over IP.  In this context, a client will usually
+ * have many outbound ports available across which traffic can be spread if
+ * necessary.  This in effect gives such a client many response routes if
+ * desired.  The number of subscriptions per response route does not therefore
+ * impose a hard upper functional bound.  However, the per-subscription window
+ * does.  If we wish to expose high-frequency, high-throughput observables, we
+ * have a hard constraint at the upper end where maximum number of updates per
+ * subscription per second is:
+ *
+ *   updates / sec = per-subscription-window / round-trip-time
+ *
+ * We therefore, by default, allocate more bits for each subscription window
+ * than we do for the subscription ID.  As a concrete example, if we have:
+ *
+ * ZCOAP_SUB_ID_BITS = 6
+ * ZCOAP_SUB_WDW_BITS = 16 - ZCOAP_SUB_ID_BITS = 10
+ *
+ * Maximum subscriptions-per-route = 2^6 = 64
+ * Maximum per-subscription window = 2^10 = 1024
+ *
+ * With a very modest client-server round-trip-time of 1-second, this gives us
+ * up to 1024 observation udpates per second.  That's pretty good!
+ */
+#define ZCOAP_SUB_ID_BITS 6
+#endif /* ZCOA_SUB_ID_BITS */
+
 #endif /* ZCOAP_CONFIG_H */

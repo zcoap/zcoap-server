@@ -78,6 +78,7 @@ enum {
     COAP_OPT_URI_HOST = 3,
     COAP_OPT_ETAG = 4,
     COAP_OPT_IF_NONE_MATCH = 5,
+    COAP_OPT_OBSERVE = 6,
     COAP_OPT_URI_PORT = 7,
     COAP_OPT_LOCATION_PATH = 8,
     COAP_OPT_PATH = 11,
@@ -176,7 +177,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
 /**
  * ZCOAP_METHOD_SIGNATURE
  *
- * The ZCoAP CoAP server method interface is a bit of a sprawling thing.  To
+ * The ZCoAP server method interface is a bit of a sprawling thing.  To
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
@@ -185,8 +186,8 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
 /**
  * ZCOAP_METHOD_HEADER
  *
- * All GET/PUT/POST/DELETE handlers invoked by the ZCoAP CoAP server MUST include
- * this as the first line of the function body.  Handlers must pass to this an
+ * All GET/PUT/POST/DEL handlers invoked by the ZCoAP server MUST include this
+ * as the first line of their function body.  Handlers must pass to this an
  * array of COAP_FMT indicators, defining supported content types for the method.
  * The array must be terminated with ZCOAP_FMT_SENTINEL.
  *
@@ -194,6 +195,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  */
 #define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; }
 
+typedef uint16_t coap_msg_id_t;
 #pragma pack(push, 1)
 typedef struct coap_msg_s {
     uint8_t tkl : 4;
@@ -203,18 +205,62 @@ typedef struct coap_msg_s {
         coap_code_t code_detail : COAP_CODE_BITS_DETAIL;
         coap_code_t code_class : COAP_CODE_BITS_CLASS;
     } code;
-    uint16_t msg_ID;
+    coap_msg_id_t msg_ID;
 } coap_msg_t;
 #pragma pack(pop)
 
+typedef struct coap_client_s coap_client_t; // forward declaration
 typedef struct coap_req_data_s coap_req_data_t; // forward declaration
+
+/**
+ * coap_endpoint_clone_t
+ *
+ * zcoap-server client endpoint clone interface.
+ *
+ * Called by the ZCoAP server to clone a client response endpoint for
+ * observable subscriptions.
+ *
+ * @param req incoming CoAP message with request-centric implementation metadata
+ */
+#ifdef __GNUC__
+typedef void * __attribute__((nonnull (1))) (* const coap_endpoint_clone_t)(void *);
+#else
+typedef void * (* const coap_endpoint_clone_t)(void *);
+#endif
+
+/**
+ * coap_endpoint_free_t
+ *
+ * zcoap-server client endpoint destruction interface.
+ *
+ * Called by the ZCoAP server to free client response endpoint information when
+ * ending subscriptions.
+ */
+#ifdef __GNUC__
+typedef void __attribute__((nonnull (1))) (* const coap_endpoint_free_t)(void *);
+#else
+typedef void (*const coap_endpoint_free_t)(void *);
+#endif
+
+/**
+ * coap_endpoint_cmp_t
+ *
+ * zcoap-server client response endpoint comparison interface.
+ *
+ * Called by the ZCoAP server to match and sort client response endpoints.
+ */
+#ifdef __GNUC__
+typedef int __attribute__((nonnull (1, 2))) (* const coap_endpoint_cmp_t)(const void * const a, const void * const b);
+#else
+typedef int (*const coap_endpoint_cmp_t)(const void * const a, const void * const b);
+#endif
 
 /**
  * coap_discard_t
  *
  * zcoap-server message discard interface.
  *
- * Called by the ZCoAP CoAP server when processing of an incoming message is
+ * Called by the ZCoAP server when processing of an incoming message is
  * complete, whether that be a completion with successfully generated response
  * or silently discarding the message.
  *
@@ -222,11 +268,10 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
  *
  * @param req incoming CoAP message with request-centric implementation metadata
  */
-
 #ifdef __GNUC__
-typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data_t * const req);
+typedef void __attribute__((nonnull (1))) (* const coap_discard_t)(coap_req_data_t * const);
 #else
-typedef void (*const coap_discard_t)(coap_req_data_t* const req);
+typedef void (*const coap_discard_t)(coap_req_data_t * const);
 #endif
 
 /**
@@ -261,7 +306,7 @@ struct coap_req_data_s {
     const int context;
 
     /**
-     * route
+     * endpoint
      *
      * Client address information to pass back to responder and acker functions.
      * Can be anything as required by a particular implementation.
@@ -279,7 +324,7 @@ struct coap_req_data_s {
      * contains the client's outbound port, on which it will also listen for
      * responses.
      */
-    const void * const route;
+    const void * const endpoint;
 
     /**
      * msg
@@ -296,7 +341,7 @@ struct coap_req_data_s {
      */
     const size_t len;
 
-    /*
+    /**
      * discard
      *
      * Implementation-specific 'discard' function to be called when a message
@@ -319,6 +364,35 @@ struct coap_req_data_s {
     coap_responder_t responder;
 
     /**
+     * endpoint_clone
+     *
+     * Implementation-specific 'endpoint-clone' function to be called by the
+     * server to clone client-response routing information when a client
+     * subscribes to an observable resource.
+     */
+    coap_endpoint_clone_t endpoint_clone;
+
+    /**
+     * endpoint_free
+     *
+     * Implementation-specific 'endpoint-free' function to be called by the
+     * server to free client-response routing information when a client
+     * unsubscribes from an observable resource, or when a subscription is
+     * garbage-collected.
+     */
+    coap_endpoint_free_t endpoint_free;
+
+    /**
+     * endpoint_cmp
+     *
+     * Implementation-specific 'endpoint-comparison' function.  This is called by
+     * the server to compare client response routing information.  This can be used
+     * to identify duplicate subscriptions, match client-to-server ACKs with
+     * subscriptions and to sort subscriptions.
+     */
+    coap_endpoint_cmp_t endpoint_cmp;
+
+    /**
      * Used by the server internally to maintain state.  Cleared on injection
      * of the request into the server.
      */
@@ -337,11 +411,36 @@ typedef struct coap_opt_s {
     const void *val;
 } coap_opt_t;
 
+typedef uint32_t coap_opt_num_t; // technically, it's possible with delta encoding to have an option number > UINT16_MAX
 typedef struct coap_msg_opt_s {
-    uint32_t num;
+    coap_opt_num_t num;
     uint16_t len;
     const void *val;
 } coap_msg_opt_t;
+
+// RFC 7651 Observables
+#define COAP_OBS_SUBSCRIBE 0
+#define COAP_OBS_UNSUBSCRIBE 1
+#define COAP_MSG_ID_BITS (sizeof(coap_msg_id_t) * 8)
+#define ZCOAP_SUB_WDW_BITS (COAP_MSG_ID_BITS - ZCOAP_SUB_ID_BITS)
+typedef struct coap_sub_s coap_sub_t; // forward declaration
+struct coap_sub_s {
+    const void *endpoint;
+    coap_endpoint_cmp_t cmp;
+    uint64_t token;
+    size_t tkl;
+    union {
+        struct {
+            coap_msg_id_t rsp_id : ZCOAP_SUB_WDW_BITS; // window_right
+            coap_msg_id_t sub_id : ZCOAP_SUB_ID_BITS;
+        };
+        coap_msg_id_t msg_ID;
+    };
+    coap_msg_id_t window_left : ZCOAP_SUB_WDW_BITS;
+    coap_sub_t *prev;
+    coap_sub_t *next;
+};
+// End RFC 7651 Observable structures
 
 typedef struct coap_node_s coap_node_t; // forward declaration
 
@@ -424,6 +523,7 @@ struct coap_node_s {
     coap_init_t init; // init function to call against the node at system init; called by zcoap-server.c at init if non-null
     coap_validate_t validate; // utility validator for init and PUT/POST; called by zcoap.c PUT/POST utility methods if non-null
     const void *metadata; // node metadata; can be anything as necessary for a node's handlers to understand their context
+    coap_sub_t subs; // linked-list of observable subscriptions
     bool hidden : 1; // if true, do not advertise in .well-known/core
 };
 

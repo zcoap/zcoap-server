@@ -66,24 +66,26 @@ enum {
 };
 
 enum {
-    CBOR_MAJOR_TYPE7_FALSE = 20,
-    CBOR_MAJOR_TYPE7_TRUE = 21,
-    CBOR_MAJOR_TYPE7_NULL = 22,
-    CBOR_MAJOR_TYPE7_UNDEF = 23,
 };
 
 enum {
-    // CBOR int encoding
-    CBOR_ADD_UINT8 = 24,
-    CBOR_ADD_UINT16 = 25,
-    CBOR_ADD_UINT32 = 26,
-    CBOR_ADD_UINT64 = 27,
-    // CBOR float encoding
-    CBOR_ADD_SIMPLE_BYTE = 24,
-    CBOR_ADD_HALF = 25,
-    CBOR_ADD_SINGLE = 26,
-    CBOR_ADD_DOUBLE = 27,
-    CBOR_ADD_BREAK = 31,
+    // CBOR Major Type 0/1 Integer encoding
+    CBOR_ADD_INFO_UINT8 = 24,
+    CBOR_ADD_INFO_UINT16 = 25,
+    CBOR_ADD_INFO_UINT32 = 26,
+    CBOR_ADD_INFO_UINT64 = 27,
+    // CBOR Major Type 7 Simple value encoding
+    CBOR_ADD_INFO_FALSE = 20,
+    CBOR_ADD_INFO_TRUE = 21,
+    CBOR_ADD_INFO_NULL = 22,
+    CBOR_ADD_INFO_UNDEF = 23,
+    CBOR_ADD_INFO_SIMPLE_VALUE_BYTE = 24,
+    // CBOR Major Type 7 Float encoding
+    CBOR_ADD_INFO_HALF = 25,
+    CBOR_ADD_INFO_SINGLE = 26,
+    CBOR_ADD_INFO_DOUBLE = 27,
+    // CBOR Major Type 7 Indefinite length break
+    CBOR_ADD_INFO_BREAK = 31,
 };
 
 #pragma pack(push)
@@ -1188,8 +1190,8 @@ static const coap_node_t *wellknown_children[] = { &core_uri, NULL };
  * As can be seen in the handler's implementation above, this is actually
  * pretty complex!  But it's all pretty well-structured.  We're performing a
  * depth-first search using the C stack; cool!  Also worth noting: the ZCoAP
- * server is one of the *very* few (actually, the only one this writer knows of)
- * that provides content-type discovery in the .well-known/core interface.
+ * server is one of the *very* few (actually, the only one this writer knows
+ * of) that provides content-type discovery in the .well-known/core interface.
  * Big value!
  */
 const coap_node_t wellknown_uri = { .name = ".well-known", .children = wellknown_children };
@@ -1369,21 +1371,25 @@ coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* co
 }
 
 /**
- * Get a CoAP content format option from a CoAP request.  Parses req for its
- * options if caller passes opts == NULL.
+ * Get a CoAP content type designator from a content format or accept option
+ * in a CoAP request.  Parses req for its options if caller passes opts == NULL.
  *
  * @param req request to search for content format option
  * @param nopts number of options in the request
  * @param opts parsed request options, or null if not available
- * @param ct (out) written to content format option value if a content format option was found
+ * @param needle option number to search for; must be  COAP_OPT_CONTENT_FMT or COAP_OPT_ACCEPT
+ * @param ct (out) content type designator from the caller-specified option, or ZCOAP_FMT_NONE if the option was not found
  * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
  */
-coap_code_t
+static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (1, 4)))
+__attribute__((nonnull (1, 5)))
 #endif
-coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+coap_get_content_type_designator(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_opt_num_t needle, coap_ct_t* const ct)
 {
+    if (needle != COAP_OPT_CONTENT_FMT && needle != COAP_OPT_ACCEPT) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (ct == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
@@ -1415,14 +1421,14 @@ coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_o
         if ((rc = coap_get_opts(req, nopts, lopts))) {
             return rc;
         }
-        const coap_msg_opt_t key = { .num = COAP_OPT_CONTENT_FMT };
+        const coap_msg_opt_t key = { .num = needle };
         ct_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
     } else {
-        const coap_msg_opt_t key = { .num = COAP_OPT_CONTENT_FMT };
+        const coap_msg_opt_t key = { .num = needle };
         ct_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
     }
     if (ct_opt == NULL) {
-        // No content format option found.
+        *ct = ZCOAP_FMT_NONE;
         return 0;
     }
     if (!ct_opt->len) {
@@ -1448,6 +1454,44 @@ coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_o
         *ct = *(uint8_t *)ct_opt->val;
     }
     return 0;
+}
+
+/**
+ * Get a CoAP content type designator from a content format option in a CoAP request.
+ * Parses req for its options if caller passes opts == NULL.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed content format option, or ZCOAP_FMT_NONE if the no content format option was found
+ * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
+ */
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 4)))
+#endif
+coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
+}
+
+/**
+ * Get a CoAP content type designator from an accept option in a CoAP request.
+ * Parses req for its options if caller passes opts == NULL.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
+ * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
+ */
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 4)))
+#endif
+coap_get_accept_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
 }
 
 /**
@@ -1846,6 +1890,24 @@ inject_coap_req(coap_req_data_t* const req, const coap_node_t* const root)
         coap_status_rsp(req, rc);
         return;
     }
+    // Search for any occurrences of proxy options.
+    // We do not support forward-proxy operation.
+    {
+        const coap_msg_opt_t key = { .num = COAP_OPT_PROXY_URI };
+        const coap_msg_opt_t * const proxy_uri_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (proxy_uri_opt != NULL) {
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_NO_PROXY_SUPPORT));
+            return;
+        }
+    }
+    {
+        const coap_msg_opt_t key = { .num = COAP_OPT_PROXY_SCHEME };
+        const coap_msg_opt_t * const proxy_scheme_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (proxy_scheme_opt != NULL) {
+            coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_NO_PROXY_SUPPORT));
+            return;
+        }
+    }
     // Parse for path options.
     while (nopts) {
         // Find *an* occurrence of a path option (perhaps not the first).
@@ -1999,6 +2061,378 @@ void coap_init(const coap_node_t * const root)
 {
     iter_coap_sort(root, NULL);
 }
+
+/*********** Begin RFC7651 observation request utility functions. ************/
+
+/*
+ * We use part of the 16-bit message ID space to track per-subscriber-endpoint
+ * subscriptions.  The maximum number of subscriptions we can support per endpoint
+ * is dependent upon the number of bits in the message ID space we designate
+ * for this purpose.
+ */
+#define ZCOAP_SUBS_PER_ROUTE (1 << ZCOAP_SUB_ID_BITS)
+
+#if INT_MAX == INT16_MAX
+#define WORD_ALIGN_SHIFT 1
+#elif INT_MAX == INT32_MAX
+#define WORD_ALIGN_SHIFT 2
+#elif INT_MAX == INT64_MAX
+#define WORD_ALIGN_SHIFT 3
+#else
+#error no support for INT_MAX
+#endif
+#define BITS_PER_WORD (1 << (WORD_ALIGN_SHFIT + 3))
+#define MAP_IDX_TO_BIT_IDX(_i) ((_i) << (WORD_ALIGN_SHIFT + 3))
+#define BIT_IDX_TO_MAP_IDX(_i) ((_i) >> (WORD_ALIGN_SHIFT + 3))
+#define BIT_IDX_TO_BIT_POS(_i) ((_i) & ((1 << (WORD_ALIGN_SHIFT + 3)) - 1))
+
+/*
+ * A subscriber map is a per-client-endpoint map of IDs allocated to existing
+ * subscriptions.  Each bit set in the map represents an allocated subscription
+ * ID.  Each bit clear in the map represents an available subscription ID.
+ */
+typedef struct coap_sub_map_s {
+    const void *endpoint;
+    coap_endpont_cmp_t cmp;
+    unsigned map[ZCOAP_SUBS_PER_ROUTE / BITS_PER_WORD];
+} coap_sub_map_t;
+
+static coap_sub_map_t *subscribers = NULL;
+static size_t n_subscribers = 0;
+static coap_sub_t *subscriptions = NULL;
+static size_t n_subscriptions = 0;
+
+/**
+ * Compare two instances of the sub_id_map_t structure based upon the client
+ * endpoint enclosed in each and evaluated based upon an enclosed endpoint
+ * comparator.
+ *
+ * @param _a subscriber a subscription map
+ * @param _b subscriber b subscription map
+ * @return -1 if endpoint a < endpoint b, 1 if endpoint a > endpoint b, 0 if endpoint a == endpoint b
+ */
+static int sub_map_cmp(const void * const _a, const void * const _b)
+{
+    coap_sub_map_t *a = (coap_sub_map_t *)_a;
+    coap_sub_map_t *b = (coap_sub_map_t *)_b;
+    int rv = 0;
+    if (a->cmp != NULL && (rv = (*a->cmp)(a->endpoint, b->endpoint)) != 0) {
+        return rv;
+    }
+    return 0;
+}
+
+/**
+ * Compare two instances of the coap_sub_t structure based upon the enclosed
+ * subscriber endpoint and subscription token.
+ *
+ * @param _a subscription a
+ * @param _b subscription b
+ * @return -1 if a < b, 1 if a > b, 0 if a == b
+ */
+static int sub_req_cmp(const void * const _a, const void * const _b)
+{
+    coap_sub_t *a = (coap_sub_t *)_a;
+    coap_sub_t *b = (coap_sub_t *)_b;
+    int rv = 0;
+    if (a->cmp != NULL && (rv = (*a->cmp)(a->endpoint, b->endpoint)) != 0) {
+        return rv;
+    }
+    if (a->tkl != b->tkl) {
+        return a->tkl < b->tkl ? -1 : 1;
+    }
+    if (a->token != b->token) {
+        return a->token < b->token ? -1 : 1;
+    }
+    return 0;
+}
+
+/**
+ * Compare two instances of the coap_sub_t structure based upon the enclosed
+ * subscriber endpoint and subscription ID.  The ZCoAP server uses part of
+ * the 16-bit message ID space to map subscriptions.  This way we can
+ * unambiguously map confirmable response ACKs to subscriptions.
+ *
+ * @param _a subscription a
+ * @param _b subscription b
+ * @return -1 if a < b, 1 if a > b, 0 if a == b
+ */
+static int sub_ack_cmp(const void * const _a, const void * const _b)
+{
+    coap_sub_t *a = (coap_sub_t *)_a;
+    coap_sub_t *b = (coap_sub_t *)_b;
+    int rv = 0;
+    if (a->cmp != NULL && (rv = (*a->cmp)(a->endpoint, b->endpoint)) != 0) {
+        return rv;
+    }
+    if (a->sub_id != b->sub_id) {
+        return a->sub_id < b->sub_id ? -1 : 1;
+    }
+    return 0;
+}
+
+/**
+ * Find the first bit clear from right (lsb) in v.  Bit position is 1-based.
+ * If no bits are clear, return 0;
+ *
+ * @param v integer to examine
+ * @return 1-based index of first bit clear from right (lsb), or 0 if no bits are clear
+ */
+static unsigned ZCOAP_FF0R(unsigned v)
+{
+    if (v == UINT_MAX) {
+        return 0; // early out
+    }
+    for (i = 0; i < BITS_PER_WORD; ++i) {
+        if (!(v & (1 << i))) {
+            return i + 1; // bit position is 1-based
+        }
+    }
+    return 0; // make the compiler happy
+}
+
+/**
+ * Allocate a subscription ID from a subscriber's endpoint-specific map in the
+ * subscriber table.  If the subscriber is not present in the subscriber table,
+ * add it.  Within the entry in the subscriber table, we will store a single
+ * deep copy of the subscriber's endpoint information.  This deep copy will be
+ * shared amongst all subscriptions associated with the particular subscriber
+ * endpoint.
+ *
+ * @param req initiating client request
+ * @param endpoint (out) reference to deep-copy of subscriber endpoint information
+ * @param id (out) allocated endpoint-specific subscription ID
+ * @return 0 on success, an appropriate CoAP error code on failure
+ */
+static coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2, 3)))
+#endif
+alloc_sub_id(coap_req_data_t *req, const void ** const endpoint, coap_msg_id_t *id)
+{
+    if (req == NULL || endpoint == NULL || id == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_sub_map_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
+    coap_sub_map_t *subscriber = bsearch(&needle, subscribers, n_subscribers, sizeof(subscribers[0]), &sub_map_cmp);
+    if (subscriber == NULL) {
+        needle.map[0] = 1; // allocate first bit in first word of the map
+        if (req->endpoint_clone == NULL) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        needle.endpoint = (*req->endpoint_clone)(req->endpoint); // must deep-copy subscriber endpoint information
+        if (needle.endpoint == NULL) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        coap_sub_map_t *resized = realloc(subscribers, sizeof(subscribers[0]) * (n_subscribers + 1));
+        if (resized == NULL) {
+            if (req->endpoint_free != NULL) {
+                (*req->endpoint_free)(needle.endpoint);
+            }
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        subscribers = resized;
+        subscribers[n_subscribers] = needle;
+        ++n_subscribers;
+        qsort(subscribers, n_subscribers, sizeof(subscribers[0]), &sub_map_cmp);
+        *endpoint = needle.endpoint;
+        *id = 0; // first bit allocated in the new map; allocated id is 0
+        return 0;
+     }
+     for (size_t i = 0; i < NELM(subscriber->map); ++i) {
+        unsigned bpos;
+        if (!(bpos = ZCOAP_FF0R(subscriber->map[i]))) {
+            continue;
+        }
+        subscriber->map[i] |= 1 << (bpos - 1);
+        *endpoint = subscriber->endpoint;
+        *id = MAP_IDX_TO_BIT_IDX(i) + bpos - 1;
+        return 0;
+     }
+     return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+}
+
+/**
+ * Free a subscription ID in a subscriber's subscription map in the subscribers
+ * table.  If after freeing the passed ID the subscriber's subscription map is
+ * empty, free the subscriber's endpoint information and remove the subscriber
+ * from the subscriber table.
+ *
+ * @param req client request against which to perform lookup in the subscribers table
+ * @param id subscription id to free in the subscriber's subscription map
+ */
+static void free_sub_id(coap_req_data_t *req, coap_msg_id_t id)
+{
+    coap_sub_map_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
+    coap_sub_map_t *subscriber = bsearch(&needle, subscribers, n_subscribers, sizeof(subscribers[0]), &sub_map_cmp);
+    if (subscriber == NULL) {
+        return;
+    }
+    size_t  idx = BIT_IDX_TO_MAP_IDX(id);
+    if (idx >= NELM(subscriber->map)) {
+        return;
+    }
+    size_t bpos = BIT_DIX_TO_BIT_POS(id);
+    subscriber->map[idx] &= ~(1 << bpos);
+    for (size_t i = 0; i < NELM(subscriber->map); ++i) {
+        if (subscriber->map[i]) {
+            return; // one ore more IDs still allocated; return
+        }
+    }
+    // No IDs allocated.  Free the subscriber.
+    if (req->endpoint_free) {
+        (*req->endpoint_free)(subscriber->endpoint);
+    }
+    const size_t subscriber_idx = subscirber - subscribers;
+    const size_t remain = n_subscribers - subscriber_idx - 1;
+    ZCOAP_MEMMOVE(subscriber, subcriber + 1, remain * sizeof(*subscriber));
+    --n_subscribers;
+    coap_sub_map_t *resized = realloc(subscribers, sizeof(subscribers[0]) * (n_subscribers));
+    // We do not expect realloc to fail on shrink.  But if it does, we will
+    // simply retain the old buffer.
+    if (resized != NULL) {
+        subscribers = resized;
+    }
+}
+
+static coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2)))
+#endif
+extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
+{
+    if (opt == NULL || seq == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    if (opt->num != COAP_OPT_OBSERBVE) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    if (opt->len > 3) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+    *seq = 0;
+    // 3-byte big-endian sequence number: + 4 - 3 -> copy offset is 1
+    // 2-byte big-endian sequence number: + 4 - 2 -> copy offset is 2
+    // 1-byte big-endian sequence number: + 4 - 1 -> copy offset is 3
+    // 0-byte big-endian sequence number: + 4 - 0 -> copy offset is 4
+    memcpy((uint8_t *)seq + sizeof(seq) - opt->len, opt->val, opt->len);
+    *seq = ntohl(*seq); // Observe option stores sequence big-endian.
+    return 0;
+}
+
+/**
+ * Add a subscription to the passed node for the requesting agent.
+ *
+ * @param req request information for the subscribing client
+ * @param node (in/out) node to which to add a subscription
+ * @return 0 on success, an appropriate CoAP error code on failure
+ */
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 4)))
+#endif
+coap_subscribe(coap_req_data_t *req, coap_node_t * const node)
+{
+    coap_sub_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp, .tkl = req->msg->tkl };
+    memcpy(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
+    coap_sub_t *sub = bsearch(&needle, subscriptions, n_subscriptions, sizeof(subscriptions[0]), &sub_req_cmp);
+    if (sub == NULL) {
+        coap_code_t coap_code;
+        if ((coap_code = alloc_sub_id(req, &needle.endpoint, &needle.sub_id))) {
+            return coap_code;
+        }
+        coap_sub_t *resized = realloc(subscriptions, sizeof(subscriptions[0]) * (n_subscriptions + 1));
+        if (resized == NULL) {
+            free_sub_id(req, needle.sub_id);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        subscriptions = resized;
+        sub = subscriptions[n_subscriptions];
+        *sub = needle;
+        ++subs.n;
+        qsort(subscriptions, n_subscriptions, sizeof(subscriptions[0]), &sub_req_cmp);
+    }
+    if (node->subs.next) {
+        node->subs.next->prev = sub;
+    }
+    sub->next = node->subs.next; // O(1) insertion at beginning of subscription list
+    sub->prev = &node->subs;
+    subs.next = sub;
+    return 0;
+}
+
+void
+#ifdef __GNUC__
+__attribute__((nonnull (1)))
+#endif
+coap_unsubscribe(coap_req_data_t *req)
+{
+    coap_sub_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp, .tkl = req->msg->tkl };
+    memcpy(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
+    coap_sub_t *sub = bsearch(&needle, subscriptions, n_subscriptions, sizeof(subscriptions[0]), &sub_req_cmp);
+    if (sub == NULL) {
+        return; // not found; no-op
+    }
+    if (sub->next != NULL) {
+        sub->next->prev = sub->prev;
+    }
+    if (sub->prev != NULL) { // this should always be true
+        sub->prev->next = sub->next;
+    }
+    free_sub_id(req, sub->sub_id);
+    const size_t subscription_idx = sub - subscriptions;
+    const size_t remain = n_subscriptions - subscription_idx - 1;
+    ZCOAP_MEMMOVE(sub, sub + 1, remain * sizeof(*sub));
+    --n_subscriptions;
+    coap_sub_t *resized = realloc(subscriptions, sizeof(subscriptions[0]) * (n_subscriptions));
+    // We do not expect realloc to fail on shrink.  But if it does, we will
+    // simply retain the old buffer.
+    if (resized != NULL) {
+        subscriptions = resized;
+    }
+}
+
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 4)))
+#endif
+coap_unsubscribe(coap_req_data_t *req)
+{
+}
+
+coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2, 4)))
+#endif
+coap_process_observe_req(const coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[])
+{
+    if (node == NULL || req == NULL || opts == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    // Find *an* occurrence of an observe option.  Behavior for client
+    // inclusion of multiple observe options isn't defined.  We are within
+    // our rights to identify at most one.
+    const coap_msg_opt_t key = { .num = COAP_OPT_OBSERVE };
+    coap_msg_opt_t *observe_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+    if (observe_opt == NULL) {
+        return 0;
+    }
+    coap_obs_seq_t seq;
+    coap_code_t coap_code;
+    if ((coap_code = extract_obs_seq(observe_opt, &seq))) {
+        return coap_code;
+    }
+    switch (seq) {
+        case COAP_OBS_SUBSCRIBE:
+            return coap_subscribe(req, node);
+        case COAP_OBS_UNSUBSCRIBE:
+            coap_unsubscribe(req);
+            return 0;
+        default:
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+}
+/*********** End RFC7651 observation request utility functions. ************/
 
 /*********** Begin general request processing utililty functions. ************/
 
@@ -2923,11 +3357,11 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
     payload = (uint8_t *)payload + sizeof(cbor);
     switch (cbor.type) {
         case CBOR_MAJOR_TYPE_UNSIGNED:
-            if (cbor.add < CBOR_ADD_UINT8) {
+            if (cbor.add < CBOR_ADD_INFO_UINT8) {
                 uint8_t pval = cbor.add;
                 *out = pval;
                 return 0;
-            } else if (cbor.add == CBOR_ADD_UINT8) {
+            } else if (cbor.add == CBOR_ADD_INFO_UINT8) {
                 uint8_t pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2935,7 +3369,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 ZCOAP_MEMCPY(pval, payload, sizeof(pval));
                 *out = pval;
                 return 0;
-            } else if (cbor.add == CBOR_ADD_UINT16) {
+            } else if (cbor.add == CBOR_ADD_INFO_UINT16) {
                 uint16_t pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2944,7 +3378,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 pval = ZCOAP_NTOHS(pval);
                 *out = pval;
                 return 0;
-            } else if (cbor.add == CBOR_ADD_UINT32) {
+            } else if (cbor.add == CBOR_ADD_INFO_UINT32) {
                 uint32_t pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2953,7 +3387,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 pval = ZCOAP_NTOHL(pval);
                 *out = pval;
                 return 0;
-            } else if (cbor.add == CBOR_ADD_UINT64) {
+            } else if (cbor.add == CBOR_ADD_INFO_UINT64) {
                 uint64_t pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2967,7 +3401,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
             }
         case CBOR_MAJOR_TYPE7:
             switch (cbor.add) {
-                case CBOR_ADD_HALF: {
+                case CBOR_ADD_INFO_HALF: {
                     half_t half;
                     if (len != sizeof(half)) {
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -2984,7 +3418,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                     }
                     return 0;
                 }
-                case CBOR_ADD_SINGLE: {
+                case CBOR_ADD_INFO_SINGLE: {
                     float pval;
                     if (len != sizeof(pval)) {
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3000,7 +3434,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                     }
                     return 0;
                 }
-                case CBOR_ADD_DOUBLE: {
+                case CBOR_ADD_INFO_DOUBLE: {
                     ZCOAP_DOUBLE pval;
                     if (len != sizeof(pval)) {
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3095,14 +3529,14 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
-        if (cbor.add < CBOR_ADD_UINT8) {
+        if (cbor.add < CBOR_ADD_INFO_UINT8) {
             uint8_t pval = cbor.add;
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT8) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT8) {
             uint8_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3113,7 +3547,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT16) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT16) {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3125,7 +3559,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT32) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT32) {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3137,7 +3571,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT64) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT64) {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3158,7 +3592,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
         }
     } else if (cbor.type == CBOR_MAJOR_TYPE7) {
         switch (cbor.add) {
-            case CBOR_ADD_HALF: {
+            case CBOR_ADD_INFO_HALF: {
                 half_t half;
                 if (len != sizeof(half)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3172,7 +3606,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                 }
                 return 0;
             }
-            case CBOR_ADD_SINGLE: {
+            case CBOR_ADD_INFO_SINGLE: {
                 float pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3188,7 +3622,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                 }
                 return 0;
             }
-            case CBOR_ADD_DOUBLE: {
+            case CBOR_ADD_INFO_DOUBLE: {
                 ZCOAP_DOUBLE pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3283,14 +3717,14 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
-        if (cbor.add < CBOR_ADD_UINT8) {
+        if (cbor.add < CBOR_ADD_INFO_UINT8) {
             uint8_t pval = cbor.add;
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT8) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT8) {
             uint8_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3301,7 +3735,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT16) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT16) {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3313,7 +3747,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT32) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT32) {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3325,7 +3759,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT64) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT64) {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3342,7 +3776,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
         }
     } else if (cbor.type == CBOR_MAJOR_TYPE7) {
         switch (cbor.add) {
-            case CBOR_ADD_HALF: {
+            case CBOR_ADD_INFO_HALF: {
                 half_t half;
                 if (len != sizeof(half)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3353,7 +3787,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                 *out = pval;
                 return 0;
             }
-            case CBOR_ADD_SINGLE: {
+            case CBOR_ADD_INFO_SINGLE: {
                 float pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3363,7 +3797,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                 *out = pval;
                 return 0;
             }
-            case CBOR_ADD_DOUBLE: {
+            case CBOR_ADD_INFO_DOUBLE: {
                 ZCOAP_DOUBLE pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3451,14 +3885,14 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
-        if (cbor.add < CBOR_ADD_UINT8) {
+        if (cbor.add < CBOR_ADD_INFO_UINT8) {
             uint8_t pval = cbor.add;
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT8) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT8) {
             uint8_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3469,7 +3903,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT16) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT16) {
             uint16_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3481,7 +3915,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT32) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT32) {
             uint32_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3493,7 +3927,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                 *out = -*out;
             }
             return 0;
-        } else if (cbor.add == CBOR_ADD_UINT64) {
+        } else if (cbor.add == CBOR_ADD_INFO_UINT64) {
             uint64_t pval;
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3510,7 +3944,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
         }
     } else if (cbor.type == CBOR_MAJOR_TYPE7) {
         switch (cbor.add) {
-            case CBOR_ADD_HALF: {
+            case CBOR_ADD_INFO_HALF: {
                 half_t half;
                 if (len != sizeof(half)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3521,7 +3955,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                 *out = pval;
                 return 0;
             }
-            case CBOR_ADD_SINGLE: {
+            case CBOR_ADD_INFO_SINGLE: {
                 float pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3531,7 +3965,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                 *out = pval;
                 return 0;
             }
-            case CBOR_ADD_DOUBLE: {
+            case CBOR_ADD_INFO_DOUBLE: {
                 ZCOAP_DOUBLE pval;
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3747,10 +4181,10 @@ coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void* const payl
             switch (cbor.type) {
                 case CBOR_MAJOR_TYPE7:
                     switch (cbor.add) {
-                        case CBOR_MAJOR_TYPE7_FALSE:
+                        case CBOR_ADD_INFO_FALSE:
                             *out = false;
                             return 0;
-                        case CBOR_MAJOR_TYPE7_TRUE:
+                        case CBOR_ADD_INFO_TRUE:
                             *out = true;
                             return 0;
                         default:
@@ -3855,7 +4289,7 @@ void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coa
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -3865,12 +4299,12 @@ void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coa
             coap_printf(req, val ? ZCOAP_TRUE_STR : ZCOAP_FALSE_STR);
             break;
         case COAP_FMT_CBOR: {
-            cbor_t cbor { .type = CBOR_MAJOR_TYPE7, .add = val ? CBOR_MAJOR_TYPE7_TRUE : CBOR_MAJOR_TYPE7_FALSE };
+            cbor_t cbor { .type = CBOR_MAJOR_TYPE7, .add = val ? CBOR_ADD_INFO_TRUE : CBOR_ADD_INFO_FALSE };
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_CBOR, sizeof(cbor), &cbor);
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -3895,7 +4329,7 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -3915,7 +4349,7 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT16 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT16 };
             val = ZCOAP_HTONS(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -3926,7 +4360,7 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -3951,7 +4385,7 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -3971,7 +4405,7 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT32 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT32 };
             val = ZCOAP_HTONL(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -3982,7 +4416,7 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4007,7 +4441,7 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4027,7 +4461,7 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT64 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT64 };
             val = ZCOAP_HTONLL(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4038,7 +4472,7 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4063,7 +4497,7 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4083,7 +4517,7 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT16 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT16 };
             uint16_t _val = ZCOAP_HTONS(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4094,7 +4528,7 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4119,7 +4553,7 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4139,7 +4573,7 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT32 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT32 };
             uint32_t _val = ZCOAP_HTONL(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4150,7 +4584,7 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4175,7 +4609,7 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4195,7 +4629,7 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_UINT64 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT64 };
             uint64_t _val = ZCOAP_HTONLL(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4206,7 +4640,7 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4231,7 +4665,7 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4251,7 +4685,7 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_FLOAT };
+            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_INFO_FLOAT };
             val = ZCOAP_HTONF(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4262,7 +4696,7 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
@@ -4287,7 +4721,7 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
 {
     coap_ct_t ct;
     coap_code_t coap_code;
-    if ((coap_code = coap_get_content_type(req, nopts, opts, &ct))) {
+    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
         coap_status_rsp(req, coap_code);
         return;
     }
@@ -4307,7 +4741,7 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_DOUBLE };
+            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_INFO_DOUBLE };
             val = ZCOAP_HTOND(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4318,7 +4752,7 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
             break;
         }
         default:
-            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_CONTENT_FMT));
+            coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
     }
 }
