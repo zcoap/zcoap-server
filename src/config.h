@@ -13,6 +13,32 @@
 
 #include <platform.h>
 
+#define ZCOAP_LOG_EMERG   0
+#define ZCOAP_LOG_ALERT   1
+#define ZCOAP_LOG_CRIT    2
+#define ZCOAP_LOG_ERR     3
+#define ZCOAP_LOG_WARNING 4
+#define ZCOAP_LOG_NOTICE  5
+#define ZCOAP_LOG_INFO    6
+#define ZCOAP_LOG_DEBUG   7
+#ifndef ZCOAP_LOG
+/**
+ * Implementions may define a platform-specific logging function.
+ * If none is defined, ZCOAP_LOG is a no-op.
+ */
+#define ZCOAP_LOG(_level, ...){}
+#define ZCOAP_VLOG(_level, _fmt, _ap){}
+#endif /*ZCOAP_LOG */
+
+#ifndef ZCOAP_ASSERT
+/**
+ * Implementation may define a custom assert macro.
+ * Else, the standard libray macro is used.
+ */
+#include <assert.h>
+#define ZCOAP_ASSERT assert
+#endif /* ZCOAP_ASSERT */
+
 #ifndef ZCOAP_MAX_BUF_SIZE
 /**
  * ZCOAP_MAX_BUF_SIZE
@@ -26,7 +52,7 @@
  *
  * If you're on a microcontroller and not using __GNUC__, be aware,
  * messages will end up creating buffers on the stack of this size for each
- * level of the coap tree.  So if your tree, at its max, is 6 levels 
+ * level of the coap tree.  So if your tree, at its max, is 6 levels
  * deep, your stack should support a buffer allocation
  * of 6 * ZCOAP_MAX_BUF_SIZE.
  */
@@ -37,7 +63,7 @@
 /**
  * ZCOAP_MAX_PAYLOAD_OPTS
  *
- * We will be popping arrays of payload option pointers onto the stack. We
+ * We will be pushing arrays of payload option pointers onto the stack. We
  * therefore need to define a maximum number of option entries for incoming
  * payloads.
  */
@@ -62,10 +88,10 @@
 /**
  * ZCOAP_ALLOCA
  *
- * PDU contruction immediately prior to transmission from coap_rsp requires
+ * PDU construction immediately prior to transmission from coap_rsp requires
  * very temporary allocation of potentially large buffers.  For this purpose,
  * alloca can be ideal.  But on platforms where this is not available or for
- * which popping large amounts of data on the stack is not acceptable,
+ * which pushing large amounts of data on the stack is not acceptable,
  * malloc/free must be used instead.
  *
  * By default we use these.  But if implementations can benefit, it is
@@ -127,15 +153,17 @@
 
 #ifndef ZCOAP_LOCK
 /**
- * ZCOAP_LOCK
+ * Implementation-specific synchronization primitives.  If our CoAP server is
+ * multithreaded, we require mutex lock / unlock for reads and writes to nodes
+ * and management of our observable subscription tables.  An implementation may
+ * define these locking primitives for thread-safe operation.  Else, they are
+ * no-ops.
  *
- * The zcoap-server utility GET and PUT methods will access platform memory.
- * If operating in a multi-threaded environment, the zcoap-server must
- * protect access to this memory.  This is achieved with calls to the
- * ZCOAP_LOCK and ZCOAP_UNLOCK macros.  But zcoap is portable has no notion
- * of YOUR platform.  Thus, if YOU wish to use zcoap in a multi-threaded
- * environment, YOU must define locking/unlocking functions.  Else, zcoap
- * uses no-op macros for these.
+ * Note that only library getters and setters call the locks by default.
+ * Implementation-defined method functions must also call the lock macros or
+ * otherwise manage synchronization on their own.
+ *
+ * WARNING: PLATFORM LOCKS MUST BE RECURSIVE!
  */
 #define ZCOAP_LOCK(void){}
 #define ZCOAP_UNLOCK(void){}
@@ -195,22 +223,22 @@
 /**
  * The ZCoAP server supports a predefined number of subscriptions per client
  * response route.  This is because we must correlate confirmable observation
- * response ACKs to subscriptions based solely upon client route  and ACK
+ * response ACKs to subscriptions based solely upon client endpoint and ACK
  * message ID.  To do so, we use some of the message ID bits to map ACks to
  * per-route subscriptions.  The number of bits we allocate for this purpose
  * determine the number of subscriptions-per-route we can support.  The
  * remaining bits are used for per-subscription windowing.  The more bits we
- * have for per-subscription windowing, the more simultaneious in-flight
+ * have for per-subscription windowing, the more simultaneous in-flight
  * responses we can support in each subscription transaction window.
  *
- * Our typical usage is UDP over IP.  In this context, a client will usually
+ * A typical usage is UDP over IP.  In this scenario, a client will usually
  * have many outbound ports available across which traffic can be spread if
- * necessary.  This in effect gives such a client many response routes if
- * desired.  The number of subscriptions per response route does not therefore
- * impose a hard upper functional bound.  However, the per-subscription window
- * does.  If we wish to expose high-frequency, high-throughput observables, we
- * have a hard constraint at the upper end where maximum number of updates per
- * subscription per second is:
+ * necessary.  This in effect gives such a client access to multiple response
+ * endpoints if desired.  The number of subscriptions per response endpoint
+ * does not therefore impose a hard functional limitation.  However, the
+ * per-subscription window does.  If we wish to expose high-frequency,
+ * high-throughput observables, we have a hard constraint at the upper end
+ * where maximum number of updates per subscription per second is:
  *
  *   updates / sec = per-subscription-window / round-trip-time
  *
@@ -218,15 +246,49 @@
  * than we do for the subscription ID.  As a concrete example, if we have:
  *
  * ZCOAP_SUB_ID_BITS = 6
- * ZCOAP_SUB_WDW_BITS = 16 - ZCOAP_SUB_ID_BITS = 10
+ * ZCOAP_SUB_NSTART_BITS = 16 - ZCOAP_SUB_ID_BITS = 10
  *
  * Maximum subscriptions-per-route = 2^6 = 64
  * Maximum per-subscription window = 2^10 = 1024
  *
  * With a very modest client-server round-trip-time of 1-second, this gives us
  * up to 1024 observation udpates per second.  That's pretty good!
+ *
+ * Note that for each subscription ID within the ZCOAP_SUB_ID_BITS space, we
+ * require a state bit in each subscriber object to track subscription ID
+ * allocation.  Space required per subscriber is:
+ *
+ * bytes per subscriber object = 1 << (ZCOAP_SUB_ID_BITS - 3)
  */
 #define ZCOAP_SUB_ID_BITS 6
-#endif /* ZCOA_SUB_ID_BITS */
+#endif /* ZCOAP_SUB_ID_BITS */
+
+#ifndef ZCOAP_SUB_NSTART_BITS
+/**
+ * Set our window size for outgoing observer responses.  Higher throughput
+ * requires higher NSTART.  On the other hand, congestion concerns may warrant
+ * limiting NSTART.
+ *
+ * To compute subscription NSTART:
+ *
+ * NSTART = (1 << ZCOAP_SUB_NSTART_BITS) - 1
+ */
+#define ZCOAP_SUB_NSTART_BITS 5
+#endif /* ZCOAP_SUB_NSTART_BITS */
+
+#ifndef ZCOAP_SUB_DROP_THRESH
+/**
+ * For observables, we need a window-size threshold for which we should
+ * assume the observer has disappeared.  If our garbage collector finds that
+ * the observer has this many ACKs outstanding, we will assume the observer
+ * has disappeared and de-register the subscription.
+ *
+ * If an implementaiton exposes high-frequency observables, this can be
+ * increased to acount for endpoint link round-trip-time.
+ *
+ * Note that drop threshold must be strictly less than NSTART.
+ */
+#define ZCOAP_SUB_DROP_THRESH 20
+#endif /* ZCOAP_SUB_DROP_THRESH */
 
 #endif /* ZCOAP_CONFIG_H */

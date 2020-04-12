@@ -181,7 +181,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE const coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
+#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -193,12 +193,14 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  *
  * @param ... zero or more COAP_FMT indicators, terminated with ZCOAP_FMT_SENTINEL
  */
-#define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; }
+#define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; } \
+    coap_process_observe_req(node, req, nopts, opts, ct);
 
 typedef uint16_t coap_msg_id_t;
+#define COAP_BITS_TKL 4
 #pragma pack(push, 1)
 typedef struct coap_msg_s {
-    uint8_t tkl : 4;
+    uint8_t tkl : COAP_BITS_TKL;
     uint8_t type : 2;
     uint8_t ver : 2;
     struct {
@@ -213,36 +215,6 @@ typedef struct coap_client_s coap_client_t; // forward declaration
 typedef struct coap_req_data_s coap_req_data_t; // forward declaration
 
 /**
- * coap_endpoint_clone_t
- *
- * zcoap-server client endpoint clone interface.
- *
- * Called by the ZCoAP server to clone a client response endpoint for
- * observable subscriptions.
- *
- * @param req incoming CoAP message with request-centric implementation metadata
- */
-#ifdef __GNUC__
-typedef void * __attribute__((nonnull (1))) (* const coap_endpoint_clone_t)(void *);
-#else
-typedef void * (* const coap_endpoint_clone_t)(void *);
-#endif
-
-/**
- * coap_endpoint_free_t
- *
- * zcoap-server client endpoint destruction interface.
- *
- * Called by the ZCoAP server to free client response endpoint information when
- * ending subscriptions.
- */
-#ifdef __GNUC__
-typedef void __attribute__((nonnull (1))) (* const coap_endpoint_free_t)(void *);
-#else
-typedef void (*const coap_endpoint_free_t)(void *);
-#endif
-
-/**
  * coap_endpoint_cmp_t
  *
  * zcoap-server client response endpoint comparison interface.
@@ -250,9 +222,9 @@ typedef void (*const coap_endpoint_free_t)(void *);
  * Called by the ZCoAP server to match and sort client response endpoints.
  */
 #ifdef __GNUC__
-typedef int __attribute__((nonnull (1, 2))) (* const coap_endpoint_cmp_t)(const void * const a, const void * const b);
+typedef int __attribute__((nonnull (1, 2))) (*coap_endpoint_cmp_t)(const void * const a, const void * const b);
 #else
-typedef int (*const coap_endpoint_cmp_t)(const void * const a, const void * const b);
+typedef int (*coap_endpoint_cmp_t)(const void * const a, const void * const b);
 #endif
 
 /**
@@ -288,13 +260,92 @@ typedef void (*const coap_discard_t)(coap_req_data_t * const);
  * @param rsp buffer containing a fully-formed response for injection into the implementation-specific transport layer
  */
 #ifdef __GNUC__
-typedef void __attribute__((nonnull (1))) (* const coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp);
+typedef void __attribute__((nonnull (1))) (*coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp);
 #else
-typedef void (*const coap_responder_t)(coap_req_data_t* const req, const size_t len, const coap_msg_t* rsp);
+typedef void (*coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t* rsp);
 #endif
 
-/**
+// RFC 7651 Observables
+
+#if INT_MAX == INT16_MAX
+#define ZCOAP_WORD_ALIGN_SHIFT 1
+#elif INT_MAX == INT32_MAX
+#define ZCOAP_WORD_ALIGN_SHIFT 2
+#elif INT_MAX == INT64_MAX
+#define ZCOAP_WORD_ALIGN_SHIFT 3
+#else
+#error no support for INT_MAX
+#endif
+#define ZCOAP_BITS_PER_WORD (1 << (ZCOAP_WORD_ALIGN_SHIFT + 3))
+
+/*
+ * We use part of the 16-bit message ID space to track per-subscriber-endpoint
+ * subscriptions.  The maximum number of subscriptions we can support per endpoint
+ * is dependent upon the number of bits in the message ID space we designate
+ * for this purpose.
  */
+#define ZCOAP_SUBS_PER_ROUTE (1 << ZCOAP_SUB_ID_BITS)
+#define COAP_MSG_ID_BITS 16
+#if ZCOAP_SUB_ID_BITS + ZCOAP_SUB_NSTART_BITS > COAP_MSG_ID_BITS
+#error SUB ID and NSTART bits must fit within 16-bit message ID field!
+#endif
+#if ZCOAP_SUB_ID_BITS < 3
+#error ZCOAP_SUB_ID_BITS must be at least 3!
+#endif
+#if ZCOAP_SUB_NSTART_BITS + ZCOAP_SUB_ID_BITS < COAP_MSG_ID_BITS
+#define ZCOAP_SUB_RSV_BITS (COAP_MSG_ID_BITS - ZCOAP_SUB_NSTART_BITS + ZCOAP_SUB_ID_BITS)
+#endif
+#define ZCOAP_SUB_NSTART ((1 << ZCOAP_SUB_NSTART_BITS) - 1)
+#if ZCOAP_SUB_DROP_THRESH >= ZCOAP_SUB_NSTART
+#error ZCOAP_SUB_DROP_THRESH must be strictly less than ZCOAP_SUB_NSTART
+#endif
+
+/*
+ * A subscriber map is a per-client-endpoint map of IDs allocated to existing
+ * subscriptions.  Each bit set in the map represents an allocated subscription
+ * ID.  Each bit clear in the map represents an available subscription ID.
+ */
+typedef struct coap_subscriber_s {
+    coap_endpoint_t deep_copy_endpoint;
+    coap_endpoint_t *endpoint;
+    int context;
+    coap_responder_t responder;
+    coap_endpoint_cmp_t cmp;
+    unsigned map[ZCOAP_SUBS_PER_ROUTE / ZCOAP_BITS_PER_WORD];
+} coap_subscriber_t;
+
+typedef struct coap_node_s coap_node_t; // forward declaration
+typedef struct coap_sub_s coap_sub_t; // forward declaration
+struct coap_sub_s {
+    coap_subscriber_t *subscriber;
+    coap_node_t *node;
+    uint64_t token;
+    coap_sub_t *prev;
+    coap_sub_t *next;
+    coap_ct_t ct;
+    #pragma pack(push, 1)
+    union {
+        struct {
+            union {
+                coap_msg_id_t window_right : ZCOAP_SUB_NSTART_BITS;
+                coap_msg_id_t rsp_id : ZCOAP_SUB_NSTART_BITS;
+            };
+            coap_msg_id_t id : ZCOAP_SUB_ID_BITS;
+            #ifdef ZCOAP_SUB_RSV_BITS
+            coap_msg_id_t rsv : ZCOAP_SUB_RSV_BITS;
+            #endif
+        };
+        coap_msg_id_t msg_ID;
+    };
+    #pragma pack(pop)
+    coap_msg_id_t window_left : ZCOAP_SUB_NSTART_BITS;
+    uint8_t tkl : COAP_BITS_TKL;
+};
+typedef uint32_t coap_obs_seq_t;
+#define COAP_OBS_SEQ_BITS 24
+
+// End RFC 7651 Observable structures
+
 struct coap_req_data_s {
 
     /**
@@ -303,7 +354,7 @@ struct coap_req_data_s {
      * implementation, this will typically be a socket file descriptor that
      * may be written for ACK and response.
      */
-    const int context;
+    int context;
 
     /**
      * endpoint
@@ -324,7 +375,7 @@ struct coap_req_data_s {
      * contains the client's outbound port, on which it will also listen for
      * responses.
      */
-    const void * const endpoint;
+    coap_endpoint_t *endpoint;
 
     /**
      * msg
@@ -339,7 +390,7 @@ struct coap_req_data_s {
      *
      * Length of the incoming message.
      */
-    const size_t len;
+    size_t len;
 
     /**
      * discard
@@ -364,25 +415,6 @@ struct coap_req_data_s {
     coap_responder_t responder;
 
     /**
-     * endpoint_clone
-     *
-     * Implementation-specific 'endpoint-clone' function to be called by the
-     * server to clone client-response routing information when a client
-     * subscribes to an observable resource.
-     */
-    coap_endpoint_clone_t endpoint_clone;
-
-    /**
-     * endpoint_free
-     *
-     * Implementation-specific 'endpoint-free' function to be called by the
-     * server to free client-response routing information when a client
-     * unsubscribes from an observable resource, or when a subscription is
-     * garbage-collected.
-     */
-    coap_endpoint_free_t endpoint_free;
-
-    /**
      * endpoint_cmp
      *
      * Implementation-specific 'endpoint-comparison' function.  This is called by
@@ -402,6 +434,14 @@ struct coap_req_data_s {
          * duplicate ACK from coap_rsp.
          */
         bool acked;
+        /**
+         * Set from contexts where we are responding to an observation request.
+         */
+        bool obs;
+        /**
+         * Written with an observable node's observation sequence number.
+         */
+        coap_obs_seq_t seq;
     } state;
 };
 
@@ -418,40 +458,14 @@ typedef struct coap_msg_opt_s {
     const void *val;
 } coap_msg_opt_t;
 
-// RFC 7651 Observables
-#define COAP_OBS_SUBSCRIBE 0
-#define COAP_OBS_UNSUBSCRIBE 1
-#define COAP_MSG_ID_BITS (sizeof(coap_msg_id_t) * 8)
-#define ZCOAP_SUB_WDW_BITS (COAP_MSG_ID_BITS - ZCOAP_SUB_ID_BITS)
-typedef struct coap_sub_s coap_sub_t; // forward declaration
-struct coap_sub_s {
-    const void *endpoint;
-    coap_endpoint_cmp_t cmp;
-    uint64_t token;
-    size_t tkl;
-    union {
-        struct {
-            coap_msg_id_t rsp_id : ZCOAP_SUB_WDW_BITS; // window_right
-            coap_msg_id_t sub_id : ZCOAP_SUB_ID_BITS;
-        };
-        coap_msg_id_t msg_ID;
-    };
-    coap_msg_id_t window_left : ZCOAP_SUB_WDW_BITS;
-    coap_sub_t *prev;
-    coap_sub_t *next;
-};
-// End RFC 7651 Observable structures
-
-typedef struct coap_node_s coap_node_t; // forward declaration
-
 #ifdef __GNUC__
 typedef void __attribute__((nonnull (1, 2))) (*coap_handler_t)(ZCOAP_METHOD_SIGNATURE);
 typedef void __attribute__((nonnull(1))) (*coap_init_t)(const coap_node_t * const node);
 typedef const char * __attribute__((nonnull(1))) (*coap_validate_t)(volatile void *data);
 #else
 typedef void (*coap_handler_t)(ZCOAP_METHOD_SIGNATURE);
-typedef void (*coap_init_t)(const coap_node_t* const node);
-typedef const char* (*coap_validate_t)(volatile void* data); 
+typedef void (*coap_init_t)(const coap_node_t * const node);
+typedef const char* (*coap_validate_t)(volatile void* data);
 #endif
 
 /**
@@ -460,9 +474,9 @@ typedef const char* (*coap_validate_t)(volatile void* data);
  * Recursor callback interface for depth-first, stack-based tree operations.
  */
 #ifdef __GNUC__
-typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(const coap_node_t * const node, const void *data);
+typedef coap_code_t __attribute__((nonnull (1, 2))) (*coap_recurse_t)(coap_node_t * const node, const void *data);
 #else
-typedef coap_code_t (*coap_recurse_t)(const coap_node_t* const node, const void* data);
+typedef coap_code_t (*coap_recurse_t)(coap_node_t * const node, const void* data);
 #endif
 
 /**
@@ -509,11 +523,13 @@ __attribute__((nonnull (1, 2, 3)))
 (*coap_wildcard_t)(const coap_node_t * const parent, const char *child, coap_recurse_t recursor, const void *recursor_data);
 
 struct coap_node_s {
+    coap_sub_t subs; // linked-list of observable subscriptions
+    coap_obs_seq_t seq : COAP_OBS_SEQ_BITS; // observation sequence number
     const char *name; // node path segment
     volatile void *data; // node data pointer
     const char *fmt; // print format for plain text responses; if NULL, zcoap.c utility GET functions use default format
     const coap_node_t *parent; // pointer to parent node, or NULL for the root node; set by zcoap.c
-    const coap_node_t **children; // must be NULL or point to a NULL-terminated array of child noes
+    coap_node_t **children; // must be NULL or point to a NULL-terminated array of child noes
     coap_gen_t gen; // must be NULL or point to a child-node generator
     coap_wildcard_t wildcard; // if set, use this function to dynamically generate a matching 'wildcard' child node when no other children match
     coap_handler_t GET; // GET method pointer; must be NULL or point to a valid zcoap GET method handler
@@ -523,8 +539,10 @@ struct coap_node_s {
     coap_init_t init; // init function to call against the node at system init; called by zcoap-server.c at init if non-null
     coap_validate_t validate; // utility validator for init and PUT/POST; called by zcoap.c PUT/POST utility methods if non-null
     const void *metadata; // node metadata; can be anything as necessary for a node's handlers to understand their context
-    coap_sub_t subs; // linked-list of observable subscriptions
     bool hidden : 1; // if true, do not advertise in .well-known/core
+    bool singleton : 1; // if true, this node is a singleton in the tree and can support subscriptions
+    bool observable : 1; // if true, allow observable subscriptions
+    bool instance : 1; // state flag to ensure we only increment seq one per update of a given observable
 };
 
 // The following define our format for binary booleans on the wire.  We have:
@@ -543,6 +561,9 @@ extern coap_code_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_
 extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t *nqueryopts);
 extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t *queryopts);
 extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, const void **payload);
+extern coap_code_t __attribute__((nonnull (1, 2, 4))) coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
+extern coap_code_t __attribute__((nonnull (1))) coap_publish(coap_node_t * const node);
+extern coap_code_t coap_publish_all(void);
 
 extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
@@ -554,6 +575,9 @@ extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
+extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
+extern coap_code_t coap_publish(coap_node_t * const node);
+extern coap_code_t coap_publish_all(void);
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);
@@ -561,6 +585,9 @@ extern void coap_content_rsp(coap_req_data_t* req, coap_code_t code, coap_ct_t c
 extern void coap_status_rsp(coap_req_data_t* req, coap_code_t code);
 extern void coap_detail_rsp(coap_req_data_t* req, coap_code_t code, const char* detail);
 #endif /* __GNUC__ */
+
+extern void coap_garbage_collect(void); // garbage collect observer subscriptions
+extern void coap_cancel_all(void); // cancel all observer subscriptions
 
 #ifdef __GNUC__
 extern void coap_printf(coap_req_data_t *req, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
@@ -650,13 +677,13 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #error no support for INT_MAX
 #endif
 
-extern void coap_init(const coap_node_t *root); // <- init must be called against any URI trees before it is passed to the server!
+extern void coap_init(coap_node_t root); // <- init must be called against any URI trees before it is passed to the server!
 
 #ifdef __GNUC__
-extern void __attribute__((nonnull (1, 2))) coap_rx(coap_req_data_t *req, const coap_node_t *root); // <- server entry point!
+extern void __attribute__((nonnull (1))) coap_rx(coap_req_data_t *req, coap_node_t root); // <- server entry point!
 #else
 extern void coap_rx(coap_req_data_t* req, const coap_node_t* root); // <- server entry point!
 #endif
-extern const coap_node_t wellknown_uri;
+extern coap_node_t wellknown_uri;
 
 #endif	/* ZCOAP_SERVER_H */

@@ -1,4 +1,4 @@
-#include "../src/zcoap-server.h"
+#include "zcoap-server.h"
 
 extern coap_code_t
 #ifdef __GNUC__

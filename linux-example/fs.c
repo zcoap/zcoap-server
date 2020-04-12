@@ -2,7 +2,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "example-server-linux-fs.h"
+#include "fs.h"
 
 /**
  * Return the contents of the local file at path node->metadata to the
@@ -20,7 +20,7 @@ void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
     const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -31,7 +31,7 @@ void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
         if (err == EACCES) {
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED));
         } else {
-            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
+            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
         return;
@@ -40,18 +40,18 @@ void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
     char *file_contents = NULL;
     size_t total = 0;
     while (fgets(buf, sizeof(buf), fptr)) {
-        size_t len = strlen(buf);
-        char *resized = realloc(file_contents, total + len);
+        size_t _len = strlen(buf);
+        char *resized = realloc(file_contents, total + _len);
         if (resized == NULL) {
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
             goto coap_fs_get_out;
         }
         file_contents = resized;
-        memcpy(&file_contents[total], buf, len);
-        total += len;
+        memcpy(&file_contents[total], buf, _len);
+        total += _len;
     }
     if (ferror(fptr)) {
-        ZCOAP_DEBUG("%s: error reading '%s'\n", __func__, path);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error reading '%s'\n", __func__, path);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_STREAM, total, file_contents);
@@ -80,7 +80,7 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
     const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -91,14 +91,14 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
         if (err == EACCES) {
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED));
         } else {
-            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
+            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error opening '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
         return;
     }
     fwrite(payload, 1, len, fptr);
     if (ferror(fptr)) {
-        ZCOAP_DEBUG("%s: error writing '%s'\n", __func__, path);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error writing '%s'\n", __func__, path);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
@@ -123,7 +123,7 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
     ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
     const char *path = node->metadata;
     if (path == NULL) {
-        ZCOAP_DEBUG("%s: error, path is null\n", __func__);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error, path is null\n", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
@@ -131,13 +131,13 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
     if (remove(path)) {
         int err = errno;
         if (err == EACCES) {
-            ZCOAP_DEBUG("%s: error removing '%s'; %d (%s)\n", __func__, path, err, strerror(err));
+            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error removing '%s'; %d (%s)\n", __func__, path, err, strerror(err));
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED));
         } else {
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         }
     } else {
-        coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DELETE));
+        coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_DEL));
     }
 }
 
@@ -174,7 +174,7 @@ coap_code_t __attribute__((nonnull (1, 2, 3))) create_coap_fs_node(const coap_no
     path[parent_path_len] = '/';
     memcpy(&path[parent_path_len + 1], name, name_len);
     path[path_len] = '\0';
-    coap_node_t child = { .name = name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DELETE = parent->DELETE, .gen = &coap_fs_gen, .metadata = path };
+    coap_node_t child = { .name = name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DEL = parent->DEL, .gen = &coap_fs_gen, .metadata = path };
     return (*recursor)(&child, recursor_data);
 }
 
@@ -217,8 +217,8 @@ coap_code_t __attribute__((nonnull (1, 2, 3))) create_coap_fs_node(const coap_no
  *   * But, mounted paths should also have appropriate local permissions set.
  *   * Attacks escaping the mount point should be considered.
  *   * create_coap_fs_node does reject relative traversal up the filesystem
- *     tree ("../"), but for security, excecuting the server wihtin a chroot
- *     jail is worh considering.
+ *     tree ("../"), but for security, excecuting the server within a chroot
+ *     or other jail is worh considering.
  *   * This may be particularly important when .PUT, .DELETE or .wildcard
  *     features are active.
  *
@@ -239,7 +239,7 @@ coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * cons
     if (!d) {
         int err = errno;
         if (err && err != ENOTDIR && err != EACCES) {
-            ZCOAP_DEBUG("%s: error opening '%s'; %d (%s)\n", __func__, parent_path, err, strerror(err));
+            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error opening '%s'; %d (%s)\n", __func__, parent_path, err, strerror(err));
             rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
         goto coap_fs_gen_out;

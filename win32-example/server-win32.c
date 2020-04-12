@@ -58,7 +58,7 @@ typedef struct CoapTransaction_t {
  */
 static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
 {
-    const struct CoapTransaction_t *ct = req->route;
+    const struct CoapTransaction_t *ct = req->endpoint;
 
     printf("    Coap Response - id = %d, code detail = %d, code class = %d, type = %d, len = %d\n",
         rsp->msg_ID, rsp->code.code_detail, 
@@ -95,7 +95,7 @@ static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t
 		// Instead, we will pass through a pointer to the ClientSocket which we will send a response on
         .context = 0,
         // The address we should respond to
-        .route = receive_sock,
+        .endpoint = receive_sock,
         // Bytes of the cCoAP payload, including the UDP frame
         .msg = (const coap_msg_t *)payload,
         // Number of bytes in the payload
@@ -105,11 +105,13 @@ static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t
     };
 
     // Submit the request with the reference to the root of the tree built above
-    coap_rx(&req, &root);
+    coap_rx(&req, root);
 }
 
 int main()
 {
+    coap_init(root); // must always init our tree before use!
+
     slen = sizeof(si_other);
 
     //Initialise winsock

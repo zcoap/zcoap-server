@@ -21,12 +21,12 @@ message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 #Windows
 IF (WIN32)
 
-include_directories(example-win32 src)
+include_directories(win32-example src)
 
 ELSE()
 
 #Linux
-include_directories(example-linux src)
+include_directories(linux-example src)
 
 #set(CMAKE_CXX_FLAGS "-Werror -Wshadow")
 #set(CMAKE_C_FLAGS "-Werror -Wshadow")
@@ -49,10 +49,10 @@ IF (WIN32)
 #Example application for win32
 #Just open this CMakeLists.txt file in Visual Studio (ensure you have Linux tools installed for VS as well)
 add_executable(example-server-win32
-               example-win32/platform.h
-               example-win32/server-win32.c
-               example-win32/server-win32-endpoints.c
-               example-win32/server-win32-endpoints.h)
+               win32-example/platform.h
+               win32-example/server-win32.c
+               win32-example/server-win32-endpoints.c
+               win32-example/server-win32-endpoints.h)
 
 #Link this application against zcoap-server
 target_link_libraries(example-server-win32
@@ -62,17 +62,21 @@ ELSE()
 
 #Example program for Linux
 add_executable(example-server-linux
-               example-linux/platform.h
-               example-linux/server-linux.c
-               example-linux/server-linux-fs.c
-               example-linux/server-linux-fs.h
-               example-linux/server-linux-telemetry.c
-               example-linux/server-linux-telemetry.h)
+               linux-example/platform.h
+               linux-example/server.c
+               linux-example/public.h
+               linux-example/public.c
+               linux-example/private.h
+               linux-example/private.c
+               linux-example/fs.h
+               linux-example/fs.c)
 
+find_package (Threads)
 target_link_libraries(example-server-linux
                       zcoap-server
+                      ${CMAKE_THREAD_LIBS_INIT}
                       m)
-
+target_compile_options(example-server-linux PRIVATE -Werror -Wshadow)
 
 ENDIF()
 
