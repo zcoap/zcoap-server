@@ -66,9 +66,6 @@ enum {
 };
 
 enum {
-};
-
-enum {
     // CBOR Major Type 0/1 Integer encoding
     CBOR_ADD_INFO_UINT8 = 24,
     CBOR_ADD_INFO_UINT16 = 25,
@@ -103,7 +100,6 @@ typedef struct half_s {
     uint16_t sign : 1;
 } half_t;
 #pragma pack(pop)
-
 
 /**
  * Perform a quick runtime arithmetic check to determine whether the host
@@ -208,7 +204,7 @@ static half_t
 #ifdef __GNUC__
 __attribute__((const))
 #endif
-ZCOAP_HTONF(half_t hostfloat)
+ZCOAP_HTONH(half_t hostfloat)
 {
     if (!host_is_little_endian) {
         return hostfloat; // no conversion necessary
@@ -294,18 +290,15 @@ __attribute__((const))
 half_to_single(half_t half)
 {
     const unsigned HALF_EXP_NAN = (1 << IEEE754_HALF_BITS_EXPONENT) - 1;
-    const unsigned HALF_MASK_QNAN  = 1 << (IEEE754_HALF_BITS_FRACTION - 1);
     #ifdef NAN
-    if (half.exponent == HALF_EXP_NAN && (half.fraction & HALF_MASK_QNAN)) {
-        return SNANF; // Signaling NAN.
-    } else if (half.exponent == HALF_INF_EXP && half.fraction) {
-        return NAN; // Quiet, non-signaling NAN.
+    if (half.exponent == HALF_EXP_NAN && half.fraction) {
+        return NAN;
     } else
     #endif /* NAN */
     if (half.exponent == HALF_EXP_NAN && half.sign) {
         return -INFINITY;
     } else if (half.exponent == HALF_EXP_NAN && !half.sign) {
-        return INFINITY:
+        return INFINITY;
     } else if (half.exponent) { // Normal half precision.
         int exponent = half.exponent - 15; // excess 15
         int fraction = half.fraction |= 0x400; // add leading 1
@@ -3345,7 +3338,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull(2, 3)))
 #endif
-coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
+coap_parse_cbor_u64(size_t len, const void *payload, uint64_t * const out)
 {
     // null-checks in caller
     if (len < sizeof(cbor_t)) {
@@ -3353,7 +3346,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
     }
     cbor_t cbor;
     ZCOAP_MEMCPY(&cbor, payload, sizeof(cbor));
-    --len;
+    len -= sizeof(cbor);
     payload = (uint8_t *)payload + sizeof(cbor);
     switch (cbor.type) {
         case CBOR_MAJOR_TYPE_UNSIGNED:
@@ -3366,7 +3359,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
-                ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+                ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
                 *out = pval;
                 return 0;
             } else if (cbor.add == CBOR_ADD_INFO_UINT16) {
@@ -3374,7 +3367,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
-                ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+                ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
                 pval = ZCOAP_NTOHS(pval);
                 *out = pval;
                 return 0;
@@ -3383,7 +3376,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
-                ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+                ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
                 pval = ZCOAP_NTOHL(pval);
                 *out = pval;
                 return 0;
@@ -3392,7 +3385,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                 if (len != sizeof(pval)) {
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
-                ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+                ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
                 pval = ZCOAP_NTOHLL(pval);
                 *out = pval;
                 return 0;
@@ -3407,7 +3400,7 @@ coap_parse_cbor_u64(const size_t len, const void *payload, uint64_t * const out)
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                     }
                     ZCOAP_MEMCPY(&half, payload, sizeof(half));
-                    half = ZCOAP_NTOHH();
+                    half = ZCOAP_NTOHH(half);
                     float pval = half_to_single(half);
                     if (pval < 0.0) {
                         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -3517,7 +3510,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull(2, 3)))
 #endif
-coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
+coap_parse_cbor_i64(size_t len, const void *payload, int64_t * const out)
 {
     // null-checks in caller
     if (len < sizeof(cbor_t)) {
@@ -3525,7 +3518,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
     }
     cbor_t cbor;
     ZCOAP_MEMCPY(&cbor, payload, sizeof(cbor));
-    --len;
+    len -= sizeof(cbor);
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3541,7 +3534,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
@@ -3552,7 +3545,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3564,7 +3557,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3576,7 +3569,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHLL(pval);
             if (   (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE && pval - 1 > INT64_MAX)
                 || pval > INT64_MAX) {
@@ -3598,7 +3591,7 @@ coap_parse_cbor_i64(const size_t len, const void *payload, int64_t * const out)
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
                 ZCOAP_MEMCPY(&half, payload, sizeof(half));
-                half = ZCOAP_NTOHH();
+                half = ZCOAP_NTOHH(half);
                 float pval = half_to_single(half);
                 *out = pval;
                 if (pval - *out != 0.0) {
@@ -3705,7 +3698,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull(2, 3)))
 #endif
-coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
+coap_parse_cbor_float(size_t len, const void *payload, float * const out)
 {
     // null-checks in caller
     if (len < sizeof(cbor_t)) {
@@ -3713,7 +3706,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
     }
     cbor_t cbor;
     ZCOAP_MEMCPY(&cbor, payload, sizeof(cbor));
-    --len;
+    len -= sizeof(cbor);
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3729,7 +3722,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
@@ -3740,7 +3733,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3752,7 +3745,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3764,7 +3757,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3782,7 +3775,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, float * const out)
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
                 ZCOAP_MEMCPY(&half, payload, sizeof(half));
-                half = ZCOAP_NTOHH();
+                half = ZCOAP_NTOHH(half);
                 float pval = half_to_single(half);
                 *out = pval;
                 return 0;
@@ -3838,7 +3831,7 @@ coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const pa
     }
     switch (ct) {
         case COAP_FMT_CBOR:
-            return caoap_parse_cbor_float(len, payload, out);
+            return coap_parse_cbor_float(len, payload, out);
         case ZCOAP_FMT_NONE:
         case COAP_FMT_TEXT:
             break; // handled below
@@ -3873,7 +3866,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull(2, 3)))
 #endif
-coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
+coap_parse_cbor_double(size_t len, const void *payload, ZCOAP_DOUBLE * const out)
 {
     // null-checks in caller
     if (len < sizeof(cbor_t)) {
@@ -3881,7 +3874,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
     }
     cbor_t cbor;
     ZCOAP_MEMCPY(&cbor, payload, sizeof(cbor));
-    --len;
+    len -=  sizeof(cbor);
     payload = (uint8_t *)payload + sizeof(cbor);
     if (   cbor.type == CBOR_MAJOR_TYPE_UNSIGNED
         || cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3897,7 +3890,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
                 *out = -*out;
@@ -3908,7 +3901,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHS(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3920,7 +3913,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHL(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3932,7 +3925,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
             if (len != sizeof(pval)) {
                 return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
-            ZCOAP_MEMCPY(pval, payload, sizeof(pval));
+            ZCOAP_MEMCPY(&pval, payload, sizeof(pval));
             pval = ZCOAP_NTOHLL(pval);
             *out = pval;
             if (cbor.type == CBOR_MAJOR_TYPE_NEGATIVE) {
@@ -3950,7 +3943,7 @@ coap_parse_cbor_float(const size_t len, const void *payload, double * const out)
                     return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
                 }
                 ZCOAP_MEMCPY(&half, payload, sizeof(half));
-                half = ZCOAP_NTOHH();
+                half = ZCOAP_NTOHH(half);
                 float pval = half_to_single(half);
                 *out = pval;
                 return 0;
@@ -4299,7 +4292,7 @@ void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coa
             coap_printf(req, val ? ZCOAP_TRUE_STR : ZCOAP_FALSE_STR);
             break;
         case COAP_FMT_CBOR: {
-            cbor_t cbor { .type = CBOR_MAJOR_TYPE7, .add = val ? CBOR_ADD_INFO_TRUE : CBOR_ADD_INFO_FALSE };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE7, .add = val ? CBOR_ADD_INFO_TRUE : CBOR_ADD_INFO_FALSE };
             coap_content_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), COAP_FMT_CBOR, sizeof(cbor), &cbor);
             break;
         }
@@ -4349,7 +4342,7 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT16 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT16 };
             val = ZCOAP_HTONS(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4405,7 +4398,7 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT32 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT32 };
             val = ZCOAP_HTONL(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4461,7 +4454,7 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT64 };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT64 };
             val = ZCOAP_HTONLL(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4517,7 +4510,7 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT16 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT16 };
             uint16_t _val = ZCOAP_HTONS(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4573,7 +4566,7 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT32 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT32 };
             uint32_t _val = ZCOAP_HTONL(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4629,7 +4622,7 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .val = CBOR_ADD_INFO_UINT64 };
+            cbor_t cbor = { .type = val < 0 ? CBOR_MAJOR_TYPE_NEGATIVE : CBOR_MAJOR_TYPE_UNSIGNED, .add = CBOR_ADD_INFO_UINT64 };
             uint64_t _val = ZCOAP_HTONLL(val < 0 ? -val : val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &_val, sizeof(_val));
@@ -4685,7 +4678,7 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_INFO_FLOAT };
+            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .add = CBOR_ADD_INFO_SINGLE };
             val = ZCOAP_HTONF(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
@@ -4741,7 +4734,7 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
                 return;
             }
             #endif /* __GNUC__ */
-            cbor_t cbor = { .type = val = CBOR_MAJOR_TYPE7, .val = CBOR_ADD_INFO_DOUBLE };
+            cbor_t cbor = { .type = CBOR_MAJOR_TYPE7, .add = CBOR_ADD_INFO_DOUBLE };
             val = ZCOAP_HTOND(val);
             ZCOAP_MEMCPY(buf, &cbor, sizeof(cbor));
             ZCOAP_MEMCPY(buf + sizeof(cbor), &val, sizeof(val));
