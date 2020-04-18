@@ -1076,13 +1076,11 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     if (alen <= ZCOAP_MAX_BUF_SIZE) {
         rsp = &sbuf.typed;
     } else if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
-        coap_discard(req);
-        return;
+        goto coap_rsp_cleanup;
     }
     uint8_t *pl_ptr = populate_rsp_header(req, code, nopts, opts, rsp);
     if (pl_ptr == NULL) {
-        coap_discard(req);
-        return;
+        goto coap_rsp_cleanup;
     }
     if (pl_len && payload) {
         *pl_ptr = COAP_PAYLOAD_MARKER;
@@ -1092,7 +1090,8 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     // Transmit the response!
     (*req->responder)(req, alen, rsp);
     // Free our memory and cleanup.
-    if (alen > ZCOAP_MAX_BUF_SIZE) {
+    coap_rsp_cleanup:
+    if (rsp && alen > ZCOAP_MAX_BUF_SIZE) {
         ZCOAP_ALLOCA_FREE(rsp);
     }
     coap_discard(req);
