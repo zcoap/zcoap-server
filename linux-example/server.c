@@ -128,7 +128,6 @@ static void *poll_subscriptions(void *arg)
     uint64_t missed;
     while (!exit_request) {
         read(timerfd, &missed, sizeof(missed));
-        //coap_publish(&temperature_uri);
         coap_publish_all();
         coap_garbage_collect();
     }
