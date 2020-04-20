@@ -1028,6 +1028,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
         code = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     // Apppend observe option if appropriate.
+    coap_obs_seq_t seq;
 #ifdef __GNUC__
     // Allocate a temp pointer array on the stack.  This is for an outgoing
     // message, not an incoming message.  Thus we are not concerned about
@@ -1035,7 +1036,6 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     // in full control of this message and are confident the options array
     // is of reasonable size.  Thus we do not bounds check.
     coap_opt_t lopts[nopts + 1];
-    coap_obs_seq_t seq;
 #else
     // Non-C99 platforms don't permit a variable-length array.  So we must
     // statically allocate and must choose some reasonable limit.  If our

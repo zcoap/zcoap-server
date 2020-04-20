@@ -29,7 +29,7 @@ static void coap_put_server_name(ZCOAP_METHOD_SIGNATURE)
 
 static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
 {
-	ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_CBOR, ZCOAP_FMT_SENTINEL);
+	ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, COAP_FMT_CBOR, ZCOAP_FMT_SENTINEL);
 
     int temperature = rand() % 100;
 

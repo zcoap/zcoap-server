@@ -293,7 +293,7 @@ typedef void (*coap_responder_t)(coap_req_data_t * const req, const size_t len, 
 #error ZCOAP_SUB_ID_BITS must be at least 3!
 #endif
 #if ZCOAP_SUB_NSTART_BITS + ZCOAP_SUB_ID_BITS < COAP_MSG_ID_BITS
-#define ZCOAP_SUB_RSV_BITS (COAP_MSG_ID_BITS - ZCOAP_SUB_NSTART_BITS + ZCOAP_SUB_ID_BITS)
+#define ZCOAP_SUB_RSV_BITS (COAP_MSG_ID_BITS - ZCOAP_SUB_NSTART_BITS - ZCOAP_SUB_ID_BITS)
 #endif
 #define ZCOAP_SUB_NSTART ((1 << ZCOAP_SUB_NSTART_BITS) - 1)
 #if ZCOAP_SUB_DROP_THRESH >= ZCOAP_SUB_NSTART
@@ -682,7 +682,7 @@ extern void coap_init(coap_node_t root); // <- init must be called against any U
 #ifdef __GNUC__
 extern void __attribute__((nonnull (1))) coap_rx(coap_req_data_t *req, coap_node_t root); // <- server entry point!
 #else
-extern void coap_rx(coap_req_data_t* req, const coap_node_t* root); // <- server entry point!
+extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry point!
 #endif
 extern coap_node_t wellknown_uri;
 

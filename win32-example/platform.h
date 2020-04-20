@@ -9,6 +9,14 @@
 #ifndef ZCOAP_PLATFORM_H
 #define ZCOAP_PLATFORM_H
 
+#include <winsock2.h>
+typedef struct CoapTransaction_t {
+    SOCKET rxSocket;
+    struct sockaddr_in rxAddress;
+    int socketaddr_length;
+} coap_transaction;
+typedef coap_transaction coap_endpoint_t;
+
 //#define ZCOAP_MAX_BUF_SIZE 64
 //#define ZCOAP_MAX_PAYLOAD_OPTS 32
 //#define ZCOAP_MALLOC malloc

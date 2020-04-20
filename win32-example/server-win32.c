@@ -1,7 +1,6 @@
 
 
 #include<stdio.h>
-#include<winsock2.h>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 
@@ -34,12 +33,6 @@ int slen, recv_len;
 char buf[BUFLEN];
 WSADATA wsa;
 
-typedef struct CoapTransaction_t {
-    SOCKET rxSocket;
-    struct sockaddr_in* rxAddress;
-    int socketaddr_length;
-}coap_transaction;
-
 /**
  * UDP CoAP responder and ack function.  Used as callback from zcoap-server.
  * Injects the passed CoAP message into our UDP stack.  req will have been
@@ -67,7 +60,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
     
     //Send coap response to sender
     int send_result = sendto(ct->rxSocket, rsp, len, 0, 
-        (struct sockaddr*)ct->rxAddress, 
+        (struct sockaddr*)&ct->rxAddress,
         ct->socketaddr_length);
 
     if (send_result == SOCKET_ERROR){
@@ -87,7 +80,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
  * @param len datagram payload length
  * @parm payload UDP payload - presumed to be a CoAP message structure
  */
-static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t payload[])
+static void dispatch(coap_transaction *ct, const size_t len, const uint8_t payload[])
 {
     // Make a request
     coap_req_data_t req = {
@@ -95,7 +88,7 @@ static void dispatch(const SOCKET *receive_sock, const size_t len, const uint8_t
 		// Instead, we will pass through a pointer to the ClientSocket which we will send a response on
         .context = 0,
         // The address we should respond to
-        .endpoint = receive_sock,
+        .endpoint = ct,
         // Bytes of the cCoAP payload, including the UDP frame
         .msg = (const coap_msg_t *)payload,
         // Number of bytes in the payload
@@ -169,7 +162,7 @@ int main()
         //pass the data into zcoap-server.  We need this data so that the response function
         //is able to send data back to the socket recipent
         coap_transaction ct;
-        ct.rxAddress = &si_other;
+        ct.rxAddress = si_other;
         ct.rxSocket = receive_sock;
         ct.socketaddr_length = slen;
 
