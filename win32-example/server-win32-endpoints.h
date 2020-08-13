@@ -7,4 +7,4 @@
  * allow GET and PUT.  Some just allow GET.  Some return static data.  Some
  * return random data!
  */
-extern const coap_node_t telemetry_uri;
+extern coap_node_t telemetry_uri;

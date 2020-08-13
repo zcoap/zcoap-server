@@ -43,10 +43,10 @@ static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
 // /telemetry/temperature/max
 // /telemetry/digits
 // /telemetry/name
-static const coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT = &coap_put_server_name, .data = &server_name };
-static const coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
-static const coap_node_t max_temperature = { .name = "max", .GET = &coap_get_int, .data = &max_server_temperature };
-static const coap_node_t *temperature_children[] = { &max_temperature, NULL };
-static const coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature, .children = temperature_children };
-static const coap_node_t *telemetry_children[] = { &temperature, &digits, &name, NULL };
-const coap_node_t telemetry_uri = { .name = "telemetry", .children = telemetry_children };
+static coap_node_t name = { .name = "name", .GET = &coap_get_string, .PUT = &coap_put_server_name, .data = &server_name };
+static coap_node_t digits = { .name = "digits", .GET = &coap_get_int, .PUT = &coap_put_int, .data = &server_digits };
+static coap_node_t max_temperature = { .name = "max", .GET = &coap_get_int, .data = &max_server_temperature };
+static coap_node_t *temperature_children[] = { &max_temperature, NULL };
+static coap_node_t temperature = { .name = "temperature", .GET = &coap_get_server_temperature, .children = temperature_children };
+static coap_node_t *telemetry_children[] = { &temperature, &digits, &name, NULL };
+coap_node_t telemetry_uri = { .name = "telemetry", .children = telemetry_children };
