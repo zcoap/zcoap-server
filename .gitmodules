@@ -1,0 +1,3 @@
+[submodule "zsnprintf"]
+	path = zsnprintf
+	url = https://github.com/zcoap/zsnprintf
