@@ -133,7 +133,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTONS(uint16_t hostshort)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostshort; // no conversion necessary
     }
     uint16_t netshort;
@@ -156,7 +156,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTONL(uint32_t hostlong)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostlong; // no conversion necessary
     }
     uint32_t netlong;
@@ -181,7 +181,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTONLL(uint64_t hostllong)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostllong; // no conversion necessary
     }
     uint64_t netllong;
@@ -210,7 +210,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTONH(half_t hostfloat)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostfloat; // no conversion necessary
     }
     half_t netfloat;
@@ -233,7 +233,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTONF(float hostfloat)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostfloat; // no conversion necessary
     }
     float netfloat;
@@ -258,7 +258,7 @@ __attribute__((const))
 #endif
 ZCOAP_HTOND(ZCOAP_DOUBLE hostdouble)
 {
-    if (!host_is_little_endian) {
+    if (!host_is_little_endian()) {
         return hostdouble; // no conversion necessary
     }
     ZCOAP_DOUBLE netdouble;
