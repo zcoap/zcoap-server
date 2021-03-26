@@ -555,21 +555,6 @@ typedef uint8_t zcoap_bool_t;
 #define ZCOAP_TRUE_STR "true"
 #define ZCOAP_FALSE_STR "false"
 
-#ifdef __GNUC__
-extern coap_code_t __attribute__((nonnull (1, 4))) coap_get_content_type(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t *ct);
-extern coap_code_t __attribute__((nonnull (4, 5))) coap_get_size1(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool *found, uint32_t *size1);
-extern coap_code_t __attribute__((nonnull (1, 4))) coap_count_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t *nqueryopts);
-extern coap_code_t __attribute__((nonnull (1, 5))) coap_get_query_opts(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t *queryopts);
-extern coap_code_t __attribute__((nonnull (1))) coap_get_payload(coap_req_data_t *req, size_t *len, const void **payload);
-extern coap_code_t __attribute__((nonnull (1, 2, 4))) coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
-extern coap_code_t __attribute__((nonnull (1))) coap_publish(coap_node_t * const node);
-extern coap_code_t coap_publish_all(void);
-
-extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
-extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
-extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
-extern void __attribute__((nonnull (1))) coap_detail_rsp(coap_req_data_t *req, coap_code_t code, const char *detail);
-#else
 extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
 extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, uint32_t* size1);
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
@@ -578,22 +563,15 @@ extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const voi
 extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
 extern coap_code_t coap_publish(coap_node_t * const node);
 extern coap_code_t coap_publish_all(void);
+extern void coap_garbage_collect(void); // garbage collect observer subscriptions
+extern void coap_cancel_all(void); // cancel all observer subscriptions
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);
 extern void coap_content_rsp(coap_req_data_t* req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void* payload);
 extern void coap_status_rsp(coap_req_data_t* req, coap_code_t code);
 extern void coap_detail_rsp(coap_req_data_t* req, coap_code_t code, const char* detail);
-#endif /* __GNUC__ */
-
-extern void coap_garbage_collect(void); // garbage collect observer subscriptions
-extern void coap_cancel_all(void); // cancel all observer subscriptions
-
-#ifdef __GNUC__
-extern void coap_printf(coap_req_data_t *req, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
-#else
 extern void coap_printf(coap_req_data_t* req, const char* fmt, ...);
-#endif /* __GNUC__ */
 
 extern void coap_return_bool(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool val);
 extern void coap_return_u16(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint16_t val);
@@ -616,15 +594,15 @@ extern void coap_get_i64(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_float(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_double(ZCOAP_METHOD_SIGNATURE);
 
-extern int coap_parse_bool(const void *ascii, size_t len, bool *out);
-extern int coap_parse_uint(const void *ascii, size_t len, unsigned *out);
-extern int coap_parse_ulong(const void *ascii, size_t len, unsigned long *out);
-extern int coap_parse_ullong(const void *ascii, size_t len, unsigned long long *out);
-extern int coap_parse_int(const void *ascii, size_t len, int *out);
-extern int coap_parse_long(const void *ascii, size_t len, long *out);
-extern int coap_parse_llong(const void *ascii, size_t len, long long *out);
-extern int coap_parse_float(const void *ascii, size_t len, float *out);
-extern int coap_parse_double(const void *ascii, size_t len, ZCOAP_DOUBLE *out);
+extern coap_code_t coap_parse_bool(const void *ascii, size_t len, bool *out);
+extern coap_code_t coap_parse_uint(const void *ascii, size_t len, unsigned *out);
+extern coap_code_t coap_parse_ulong(const void *ascii, size_t len, unsigned long *out);
+extern coap_code_t coap_parse_ullong(const void *ascii, size_t len, unsigned long long *out);
+extern coap_code_t coap_parse_int(const void *ascii, size_t len, int *out);
+extern coap_code_t coap_parse_long(const void *ascii, size_t len, long *out);
+extern coap_code_t coap_parse_llong(const void *ascii, size_t len, long long *out);
+extern coap_code_t coap_parse_float(const void *ascii, size_t len, float *out);
+extern coap_code_t coap_parse_double(const void *ascii, size_t len, ZCOAP_DOUBLE *out);
 
 extern coap_code_t coap_parse_req_bool(coap_ct_t ct, size_t len, const void *payload, bool *out);
 extern coap_code_t coap_parse_req_u16(coap_ct_t ct, size_t len, const void *payload, uint16_t *out);
@@ -678,12 +656,8 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #endif
 
 extern void coap_init(coap_node_t root); // <- init must be called against any URI trees before it is passed to the server!
-
-#ifdef __GNUC__
-extern void __attribute__((nonnull (1))) coap_rx(coap_req_data_t *req, coap_node_t root); // <- server entry point!
-#else
 extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry point!
-#endif
+
 extern coap_node_t wellknown_uri;
 
 #endif	/* ZCOAP_SERVER_H */
