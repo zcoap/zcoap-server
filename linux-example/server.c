@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
-#include <sys/timerfd.h>
+//#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -46,13 +46,7 @@ static void error(const char *fmt, ...)
 
 pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
 static bool exit_request = false;
-
-/**
- * Create a timer file descriptor to periodically wake and poll subscriptions.
- *
- * @param timer wake period in seconds
- * @return a valid timer file descriptor on success, -1 on error
- */
+/*
 static int sub_timer_create(const float period)
 {
     if (period < 0) {
@@ -82,14 +76,11 @@ static int sub_timer_create(const float period)
     return fd;
 }
 
-/**
- * No-op handler.  We are only achieving early abort to read() with EINTR.
- */
 static void poll_thread_handler(int signal)
 {
 
 }
-
+*/
 /**
  * Start and execute the observer subscription polling thread.
  *
@@ -98,6 +89,7 @@ static void poll_thread_handler(int signal)
  */
 static void *poll_subscriptions(void *arg)
 {
+/*
     // Create a timer file descriptor for the subscription polling loop.
     float period = *(float *)arg;
     int timerfd = sub_timer_create(period);
@@ -126,8 +118,9 @@ static void *poll_subscriptions(void *arg)
     errno = 0;
     int rc;
     uint64_t missed;
+    */
     while (!exit_request) {
-        read(timerfd, &missed, sizeof(missed));
+        sleep(1);//read(timerfd, &missed, sizeof(missed));
         coap_publish_all();
         coap_garbage_collect();
     }
@@ -136,7 +129,7 @@ static void *poll_subscriptions(void *arg)
     coap_cancel_all();
 
     // Cleanup and return.
-    close(timerfd);
+    //close(timerfd);
     return NULL;
 }
 
@@ -177,7 +170,7 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
 {
     int sockfd = req->context;
     const struct sockaddr_in *cli_addr = req->endpoint;
-    ssize_t sent = sendto(sockfd, rsp, len, MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
+    ssize_t sent = sendto(sockfd, rsp, len, 0, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
     if (sent < len) {
         error("socket write error on respond");
     }
@@ -255,6 +248,7 @@ static int coap_recv(int fd, ssize_t pending, coap_node_t root)
     // Send request into zcoap-server library.
     // coap_udp_respond is called by the library when the response is ready.
     dispatch(fd, root, &cli_addr, received, buf);
+    return 0;
 }
 
 /**
@@ -310,7 +304,7 @@ int bind_public_addressv6(int sockfd)
         return -1;
     }
     errno = 0;
-    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &mreq, sizeof(mreq))) {
+    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq))) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "setsockopt failed with %d (%s)", errno, strerror(errno));
         return -1;
     }
@@ -320,7 +314,7 @@ int bind_public_addressv6(int sockfd)
         return -1;
     }
     errno = 0;
-    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &mreq, sizeof(mreq))) {
+    if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq))) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "setsockopt failed with %d (%s)", errno, strerror(errno));
         return -1;
     }
@@ -406,7 +400,7 @@ int main(int argc, char *argv[])
 
     // Create our public inbound server port.
     errno = 0;
-    servers[PUBLIC_TELEM_SERVER].fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PUBLIC_TELEM_SERVER].fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (servers[PUBLIC_TELEM_SERVER].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -419,7 +413,7 @@ int main(int argc, char *argv[])
 
     // Create our public inbound IPv6 server port.
     errno = 0;
-    servers[PUBLIC_TELEM_SERVERV6].fd = socket(AF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PUBLIC_TELEM_SERVERV6].fd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (servers[PUBLIC_TELEM_SERVERV6].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -432,7 +426,7 @@ int main(int argc, char *argv[])
 
     // Create our local, private inbound server port.
     errno = 0;
-    servers[PRIVATE_SYSFS_SERVER].fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PRIVATE_SYSFS_SERVER].fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (servers[PRIVATE_SYSFS_SERVER].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -486,7 +480,7 @@ int main(int argc, char *argv[])
         errno = 0;
         int ready_fds = pselect(max + 1, &fds, NULL, NULL, NULL, &orig_mask);
         if (ready_fds < 0) {
-            if (errno = EINTR) {
+            if (errno == EINTR) {
                 ZCOAP_LOG(ZCOAP_LOG_INFO, "pselect interrupted; initiating graceful shutdown");
                 break;
             } else {
@@ -498,9 +492,7 @@ int main(int argc, char *argv[])
             if (FD_ISSET(servers[i].fd, &fds)) {
                 errno = 0;
                 ssize_t pending = recv(servers[i].fd, NULL, 0, MSG_PEEK | MSG_TRUNC);
-                if (pending < 0 && errno == EWOULDBLOCK) {
-                    continue; // spurious wake
-                } else if (pending < 0) {
+                if (pending < 0) {
                     ZCOAP_LOG(ZCOAP_LOG_ERR, "recv failed with %d (%s)", errno, strerror(errno));
                     exit_code = EXIT_FAILURE;
                     goto server_cleanup;
