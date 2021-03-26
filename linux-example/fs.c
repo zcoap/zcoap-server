@@ -155,7 +155,7 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 if the caller should keep iterating, else an appropriate CoAP code
  */
-coap_code_t __attribute__((nonnull (1, 2, 3))) create_coap_fs_node(const coap_node_t * const parent, const char *name, coap_recurse_t recursor, const void *recursor_data)
+coap_code_t create_coap_fs_node(const coap_node_t * const parent, const char *name, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!parent || !name || !recursor) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -227,7 +227,7 @@ coap_code_t __attribute__((nonnull (1, 2, 3))) create_coap_fs_node(const coap_no
  * @param recursor_data data to pass to the recursive callback function
  * @return 0 if the caller should keep iterating, else an appropriate CoAP code
  */
-coap_code_t __attribute__((nonnull (1, 2))) coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
+coap_code_t coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!parent || !recursor || !parent->metadata) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
