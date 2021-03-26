@@ -812,9 +812,7 @@ static size_t opt_sec_len(const size_t nopts, const coap_opt_t opts[])
 #ifdef __GNUC__
     const coap_opt_t *sorted[nopts]; // allocate temp pointer array on the stack
 #else
-    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-        return NULL;
-    }
+    ZCOAP_ASSERT(nopts <= ZCOAP_MAX_PAYLOAD_OPTS);
     const coap_opt_t *sorted[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
@@ -853,9 +851,7 @@ __attribute__((nonnull (1)))
 #endif
 coap_discard(coap_req_data_t* const req)
 {
-    if (req == NULL) {
-        return;
-    }
+    ZCOAP_ASSERT(req != NULL);
     if (req->discard == NULL) {
         return;
     }
@@ -871,23 +867,16 @@ coap_discard(coap_req_data_t* const req)
  * @param req CoAP request to ACK
  * @return 0 on success, non-zero on error
  */
-void
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_ack(coap_req_data_t* const req)
+void coap_ack(coap_req_data_t* const req)
 {
-    if (   req == NULL
-        || req->msg == NULL
-        || req->len < sizeof(coap_msg_t)
-        || req->responder == NULL) {
-        return;
-    }
+    ZCOAP_ASSERT(   req != NULL
+                 && req->msg != NULL
+                 && req->len >= sizeof(coap_msg_t)
+                 && req->responder == NULL);
     if (req->msg->type == COAP_TYPE_NON_CONFIRMABLE) {
         return; // no ACK needed
-    } else if (req->msg->type != COAP_TYPE_CONFIRMABLE) {
-        return; // should never land here!
     }
+    ZCOAP_ASSERT(req->msg->type == COAP_TYPE_CONFIRMABLE);
     coap_msg_t ack;
     ZCOAP_MEMCPY(&ack, req->msg, sizeof(ack));
     ack.tkl = 0;
@@ -912,11 +901,7 @@ coap_ack(coap_req_data_t* const req)
  * @param rsp_len (out) computed response length
  * @return 0 on success, appropriate errno on error
  */
-static int
-#ifdef __GNUC__
-__attribute__((nonnull (1, 5)))
-#endif
-compute_rsp_pdu_len(coap_req_data_t * const req, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, size_t *rsp_len)
+static int compute_rsp_pdu_len(coap_req_data_t * const req, const size_t nopts, const coap_opt_t opts[], const size_t pl_len, size_t *rsp_len)
 {
     // Check arguments.
     if (   req == NULL
@@ -955,9 +940,7 @@ __attribute__((nonnull (1, 5)))
 populate_rsp_header(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], coap_msg_t *rsp)
 {
     // Check arguments.
-    if (req == NULL || req->msg == NULL || rsp == NULL) {
-        return NULL;
-    }
+    ZCOAP_ASSERT(req != NULL && req->msg != NULL && rsp != NULL);
     // Copy message header and token.
     ZCOAP_MEMCPY(rsp, req->msg, sizeof(coap_msg_t) + req->msg->tkl);
     if (req->state.obs == true) {
@@ -991,7 +974,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
 {
-    // We are local-static.  Presume seq and opt are non-null.
+    ZCOAP_ASSERT(seq != NULL && opt != NULL);
     opt->num = COAP_OPT_OBSERVE;
     *seq = ZCOAP_HTONL(*seq);
     opt->len = *seq <= 0xFF ? 1 : *seq <= 0xFFFF ? 2 : 3;
@@ -1009,21 +992,15 @@ build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
  * @param pl_len response payload length
  * @param payload response payload
  */
-void
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void * const payload)
+void coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void * const payload)
 {
     // Check arguments.
-    if (   req == NULL
-        || req->msg == NULL
-        || req->len < sizeof(coap_msg_t)
-        || req->len < sizeof(coap_msg_t) + req->msg->tkl
-        || req->msg->tkl > COAP_MAX_TKL
-        || req->responder == NULL) {
-        coap_discard(req);
-        return;
+    ZCOAP_ASSERT(   req != NULL
+                 && req->msg != NULL
+                 && req->len >= sizeof(coap_msg_t)
+                 && req->len >= sizeof(coap_msg_t) + req->msg->tkl
+                 && req->msg->tkl <= COAP_MAX_TKL
+                 && req->responder != NULL);
     }
     if (pl_len && !payload) {
         pl_len = 0;
@@ -1042,10 +1019,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     // Non-C99 platforms don't permit a variable-length array.  So we must
     // statically allocate and must choose some reasonable limit.  If our
     // outgoing message exceeds this limit, we must simply ignore the request.
-    if (nopts + 1 > ZCOAP_MAX_PAYLOAD_OPTS) {
-        coap_discard(req);
-        return;
-    }
+    ZCOAP_ASSERT(nopts + 1 <= ZCOAP_MAX_PAYLOAD_OPTS);
     const coap_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
     if (req->state.obs) {
@@ -1057,10 +1031,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     }
     // Determine how big our response PDU will be.
     size_t alen;
-    if (compute_rsp_pdu_len(req, nopts, opts, pl_len, &alen)) {
-        coap_discard(req);
-        return;
-    }
+    ZCOAP_ASSERT(compute_rsp_pdu_len(req, nopts, opts, pl_len, &alen) == 0);
     // Allocate our response PDU.  Keep it on the stack if we can.
     coap_msg_t *rsp;
     union {
@@ -1070,12 +1041,11 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     if (alen <= sizeof(sbuf)) {
         rsp = &sbuf.typed;
     } else if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERROR, "%s: failed to allocate %zu bytes for response", __func__, alen);
         goto coap_rsp_cleanup;
     }
-    uint8_t *pl_ptr = populate_rsp_header(req, code, nopts, opts, rsp);
-    if (pl_ptr == NULL) {
-        goto coap_rsp_cleanup;
-    }
+    uint8_t *pl_ptr;
+    ZCOAP_ASSERT((pl_ptr = populate_rsp_header(req, code, nopts, opts, rsp)) != NULL);
     if (pl_len && payload) {
         *pl_ptr = COAP_PAYLOAD_MARKER;
         ++pl_ptr;
@@ -1101,11 +1071,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
  * @param pl_len payload length
  * @param payload payload
  */
-void
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_content_rsp(coap_req_data_t* const req, const coap_code_t code, coap_ct_t ct, const size_t pl_len, const void* const payload)
+void coap_content_rsp(coap_req_data_t* const req, const coap_code_t code, coap_ct_t ct, const size_t pl_len, const void* const payload)
 {
     coap_opt_t opts[] = {
         { .num = COAP_OPT_CONTENT_FMT },
@@ -1136,11 +1102,7 @@ coap_content_rsp(coap_req_data_t* const req, const coap_code_t code, coap_ct_t c
  * @param detail
  * @return 0 on success, non-zero on error
  */
-void
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_detail_rsp(coap_req_data_t* const req, const coap_code_t code, const char* const detail)
+void coap_detail_rsp(coap_req_data_t* const req, const coap_code_t code, const char* const detail)
 {
     coap_content_rsp(req, code, COAP_FMT_TEXT, strlen(detail), detail);
 }
@@ -1152,11 +1114,7 @@ coap_detail_rsp(coap_req_data_t* const req, const coap_code_t code, const char* 
  * @param code CoAP response code
  * @return 0 on success, non-zero on error
  */
-void
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_status_rsp(coap_req_data_t* const req, const coap_code_t code)
+void coap_status_rsp(coap_req_data_t* const req, const coap_code_t code)
 {
     return coap_rsp(req, code, 0, NULL, 0, NULL);
 }
@@ -1183,6 +1141,7 @@ coap_status_rsp(coap_req_data_t* const req, const coap_code_t code)
 static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_LINK, ZCOAP_FMT_SENTINEL);
+    ZCOAP_ASSERT(node != NULL && req != NULL && req->responder != NULL);
     const uint8_t ct_fmt_link = COAP_FMT_LINK;
     const coap_opt_t rsp_opts[] = {
         { .num = COAP_OPT_CONTENT_FMT, .val = &ct_fmt_link },
@@ -1195,10 +1154,7 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
     const href_filter_t href_filter = get_href_filter(nopts, opts);
     size_t wkn_len = snprintf_wellknown_core(NULL, 0, root, &href_filter);
     size_t pdu_len;
-    if (compute_rsp_pdu_len(req, NELM(rsp_opts), rsp_opts, wkn_len, &pdu_len)) {
-        coap_discard(req);
-        return;
-    }
+    ZCOAP_ASSERT(compute_rsp_pdu_len(req, NELM(rsp_opts), rsp_opts, wkn_len, &pdu_len) == 0);
     coap_msg_t *rsp = ZCOAP_ALLOCA(pdu_len + 1 /* \0 */);
     if (rsp == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
@@ -1356,9 +1312,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
 {
-    if (req == NULL || nopts == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    ZCOAP_ASSERT(req != NULL && nopts != NULL);
     if (req->len < sizeof(coap_msg_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -1403,9 +1357,7 @@ __attribute__((nonnull (1, 3)))
 #endif
 coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* const opts)
 {
-    if (req == NULL || opts == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    ZCOAP_ASSERT(req != NULL && opts != NULL);
     if (req->len < sizeof(coap_msg_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -1443,11 +1395,7 @@ coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* co
  * @param ct (out) content type designator from the caller-specified option, or ZCOAP_FMT_NONE if the option was not found
  * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 5)))
-#endif
-coap_get_content_type_designator(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_opt_num_t needle, coap_ct_t* const ct)
+static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_opt_num_t needle, coap_ct_t* const ct)
 {
     if (needle != COAP_OPT_CONTENT_FMT && needle != COAP_OPT_ACCEPT) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1528,11 +1476,7 @@ coap_get_content_type_designator(coap_req_data_t* const req, size_t nopts, const
  * @param ct (out) content type designator from the enclosed content format option, or ZCOAP_FMT_NONE if the no content format option was found
  * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 4)))
-#endif
-coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+coap_code_t coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
 {
    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
 }
@@ -1547,11 +1491,7 @@ coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_o
  * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
  * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 4)))
-#endif
-coap_get_accept_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+coap_code_t coap_get_accept_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
 {
    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
 }
@@ -1564,11 +1504,7 @@ coap_get_accept_type(coap_req_data_t* const req, size_t nopts, const coap_msg_op
  * @param payload (out) payload
  * @return 0 on success, else CoAP error code
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2, 3)))
-#endif
-coap_get_payload(coap_req_data_t* const req, size_t* const len, const void** payload)
+coap_code_t coap_get_payload(coap_req_data_t* const req, size_t* const len, const void** payload)
 {
     if (req == NULL || len == NULL || payload == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -1628,10 +1564,14 @@ coap_get_payload(coap_req_data_t* const req, size_t* const len, const void** pay
  */
 static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (1, 4)))
+__attribute__((nonnull (4)))
 #endif
 process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], coap_node_t* const node)
 {
+    ZCOAP_ASSERT(NODE != NULL);
+    if (req == NULL || req->msg == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     // On successful handler dispatch, return CoAP succes, 2.00.  In such a
     // case, the handler becomes responsible for responding to the client and
     // calling disard.
@@ -1773,6 +1713,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 _iter_req(coap_node_t * const node, const void * data)
 {
+    ZCOAP_ASSERT(node != NULL && data != NULL);
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: depth-first search at path segment '%s'", __func__, node->name);
     const iter_req_data_t *cdata = (const iter_req_data_t *)data;
     if (!cdata->npath_opts) { // Ding ding!  No more path options!  Match!
@@ -1875,16 +1816,15 @@ _iter_req(coap_node_t * const node, const void * data)
  * @param data iter_req_data_t
  * @return 0.00 if caller should keep iterating, non-zero if not; inject_coap_req will issue coap_status_rsp for non-2.00-class success codes
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2)))
-#endif
-iter_req(coap_node_t* const node, const void* data)
+static coap_code_t iter_req(coap_node_t* const node, const void* data)
 {
-    if (!node || !data) {
+    if (node == NULL || data == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     const iter_req_data_t *pdata = (const iter_req_data_t *)data;
+    if (pdata->path_opts == NULL || pdata->path_opts->val == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (   !pdata->npath_opts
         || !node->name /* impossible for null-name to be a match */
         || strncmp(pdata->path_opts->val, node->name, pdata->path_opts->len)
@@ -1914,6 +1854,7 @@ __attribute__((nonnull (1, 1)))
 #endif
 inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
 {
+    ZCOAP_ASSERT(req != NULL && root != NULL);
     size_t nopts;
     size_t npath_opts = 0;
     coap_msg_opt_t *first_path_opt = NULL;
@@ -2045,7 +1986,7 @@ static int sub_map_cmp(const void * const _a, const void * const _b)
  */
 static int sub_tok_cmp(const void * const _a, const void * const _b)
 {
-    ZCOAP_ASSERT(_a && _b);
+    ZCOAP_ASSERT(_a != NULL && _b != NULL);
     coap_sub_t *a = *(coap_sub_t **)_a;
     coap_sub_t *b = *(coap_sub_t **)_b;
     ZCOAP_ASSERT(a->subscriber && b->subscriber);
@@ -2135,9 +2076,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 alloc_sub_id(coap_req_data_t *req, coap_sub_t *subscription)
 {
-    if (req == NULL || subscription == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    ZCOAP_ASSERT(req != NULL && subscription != NULL);
     coap_subscriber_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
     coap_subscriber_t *key = &needle;
     coap_subscriber_t **_subscriber = subscribers ? bsearch(&key, subscribers, n_subscribers, sizeof(subscribers[0]), &sub_map_cmp) : NULL;
@@ -2237,9 +2176,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
 {
-    if (opt == NULL || seq == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    ZCOAP_ASSERT(opt != NULL && seq != NULL);
     if (opt->num != COAP_OPT_OBSERVE) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
@@ -2263,11 +2200,7 @@ extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
  * @param node (in/out) node to which to add a subscription
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2)))
-#endif
-coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
+coap_code_t coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
 {
     if (req == NULL || node == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2370,7 +2303,7 @@ __attribute__((nonnull (1)))
 #endif
 free_subscription(coap_sub_t **sub)
 {
-    // We are local-static.  Presume sub and *sub are non-null.
+    ZCOAP_ASSERT(sub != NULL && *sub != NULL);
     // Remove the subscription from the node.
     if ((*sub)->next != NULL) {
         (*sub)->next->prev = (*sub)->prev;
@@ -2416,13 +2349,11 @@ free_subscription(coap_sub_t **sub)
  */
 static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (1)))
+__attribute__((nonnull (1, 2)))
 #endif
 coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
 {
-    if (req == NULL || node == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    ZCOAP_ASSERT(req != NULL && node != NULL);
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -2453,11 +2384,7 @@ coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
  * @param parsed options array
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2, 4)))
-#endif
-coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
+coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
 {
     if (node == NULL || req == NULL || opts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2541,12 +2468,11 @@ static bool window_full(coap_msg_id_t left, coap_msg_id_t right)
  * @param node node for which to publish an update
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1)))
-#endif
-coap_publish(coap_node_t * const node)
+coap_code_t coap_publish(coap_node_t * const node)
 {
+    if (node == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (node->GET == NULL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
     }
@@ -2606,7 +2532,8 @@ __attribute__((nonnull (1)))
 #endif
 coap_publish_one(coap_sub_t *sub, bool instance)
 {
-    if (sub == NULL || sub->subscriber == NULL || sub->tkl > COAP_MAX_TKL) {
+    ZCOAP_ASSERT(sub != NULL);
+    if (sub->subscriber == NULL || sub->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (window_full(sub->window_left, sub->window_right)) {
@@ -2687,6 +2614,7 @@ __attribute__((nonnull (1)))
 #endif
 coap_handle_ack(coap_req_data_t * const ack)
 {
+    ZCOAP_ASSERT(ack != NULL);
     coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = ack->endpoint_cmp };
     coap_sub_t needle = { .subscriber = &subscriber, .msg_ID = ack->msg->msg_ID };
     coap_sub_t *key = &needle;
@@ -2714,6 +2642,7 @@ __attribute__((nonnull (1)))
 #endif
 coap_handle_reset(coap_req_data_t * const reset)
 {
+    ZCOAP_ASSERT(req != NULL);
     if (reset->endpoint_cmp == NULL) {
         return;
     }
@@ -2827,6 +2756,7 @@ void coap_cancel_all(void)
  */
 void coap_rx(coap_req_data_t * const req, coap_node_t root)
 {
+    ZCOAP_ASSERT(req != NULL);
     // Make sure we have enough bytes for a CoAP message header.
     if (req->len < sizeof(coap_msg_t)) {
         coap_discard(req);
@@ -2950,11 +2880,7 @@ void coap_init(coap_node_t root)
  * @param nqueryopts (out) number of query options found
  * @return 0 on success, else a CoAP error code
  */
-coap_code_t
-#ifdef __GNUC__
- __attribute__((nonnull (1, 4)))
-#endif
-coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], size_t* const nqueryopts)
+coap_code_t coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], size_t* const nqueryopts)
 {
     if ((opts == NULL && req == NULL) || nqueryopts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -3021,11 +2947,7 @@ coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_o
  * @param queryopts (out) written with the requests query options
  * @return 0 on success, else a CoAP error code
  */
-coap_code_t
-#ifdef __GNUC__
- __attribute__((nonnull (1, 5)))
-#endif
-coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t* const queryopts)
+coap_code_t coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t* const queryopts)
 {
     if (nqueryopts == 0) {
         return 0;
@@ -3094,11 +3016,7 @@ coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt
  * @param size1 (out) size1 option value
  * @return 0 on success, else a CoAP error code; note that size1 not found is NOT an error
  */
-extern uint8_t
-#ifdef __GNUC__
-__attribute__((nonnull (4, 5)))
-#endif
-coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], bool* const found, uint32_t* const size1)
+uint8_t coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], bool* const found, uint32_t* const size1)
 {
     if ((opts == NULL && req == NULL) || found == NULL || size1 == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -3162,7 +3080,7 @@ coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t op
 
 /************** Begin string-to-numerical conversion functions. **************/
 
-#if ULLONG_MAX == UINT64_MAX
+#if ULLONG_MAX == UINT64_MAX && LLONG_MAX == INT64_MAX
 /**
  * Interpret the passed buffer as an ascii representation of an unsigned
  * long long integer and, if successfully parsed, write to 'out'.
@@ -3395,19 +3313,19 @@ coap_code_t coap_parse_llong(const void * const ascii, const size_t len, long lo
 }
 #else
 #error ullong and llong must be 64-bit!
-#endif
+#endif /* ULLONG_MAX == UINT64_MAX && LLONG_MAX == INT64_MAX */
 
-#if ULONG_MAX == UINT64_MAX
-int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out)
+#if ULONG_MAX == ULLONG_MAX && LONG_MAX == LLONG_MAX
+coap_code_t coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out)
 {
     return coap_parse_ullong(ascii, len, (unsigned long long *)out); // we checked width; this is OK
 }
 
-int coap_parse_long(const void * const ascii, const size_t len, long * const out)
+coap_code_t coap_parse_long(const void * const ascii, const size_t len, long * const out)
 {
     return coap_parse_llong(ascii, len, (long long *)out); // we checked width; this is OK
 }
-#elif ULONG_MAX == UINT32_MAX
+#elif ULONG_MAX == UINT32_MAX && LONG_MAX == INT32_MAX
 /**
  * Interpret the passed buffer as an ascii representation of an unsigned long
  * and, if successfully parsed, write to 'out'.
@@ -3459,14 +3377,18 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out)
+coap_code_t coap_parse_ulong(const void * const ascii, const size_t len, unsigned long * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3480,7 +3402,7 @@ int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long *
     char *endptr = NULL;
     *out = strtoul(buf, &endptr, 0);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (*out == ULONG_MAX) {
         // Our c library's strtoul may not set errno, or may not have any
         // thread safety around errno.  So we must manually verify the passed
@@ -3497,7 +3419,7 @@ int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long *
                 && !strpbrk(tok + strlen("ffffffff"), "0123456789abcdefABCDEF")) {
                return 0;
             } else {
-                return EINVAL;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
         } else if (   (tok = strstr(buf, "4294967295"))
                    && !strpbrk(tok + strlen("4294967295"), "0123456789")) {
@@ -3506,7 +3428,7 @@ int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long *
                    && !strpbrk(tok + strlen("037777777777"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
@@ -3562,14 +3484,18 @@ int coap_parse_ulong(const void * const ascii, const size_t len, unsigned long *
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_long(const void * const ascii, const size_t len, long * const out)
+coap_code_t coap_parse_long(const void * const ascii, const size_t len, long * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3583,7 +3509,7 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
     char *endptr = NULL;
     *out = strtol(buf, &endptr, 0);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (*out == LONG_MAX) {
         // Our c library's strtol may not set errno, or may not have any
         // thread safety around errno.  So we must manually verify the passed
@@ -3600,7 +3526,7 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
                 && !strpbrk(tok + strlen("7fffffff"), "0123456789abcdefABCDEF")) {
                return 0;
             } else {
-                return EINVAL;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
         } else if (   (tok = strstr(buf, "2147483647"))
                    && !strpbrk(tok + strlen("2147483647"), "0123456789")) {
@@ -3609,7 +3535,7 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
                    && !strpbrk(tok + strlen("017777777777"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     } else if (*out == LONG_MIN) {
         // Likewise, verify that buffer isn't actually specifying LONG_MIN.
@@ -3624,12 +3550,12 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
                    && !strpbrk(tok + strlen("020000000000"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
 }
-#endif /* ULONG_MAX == UINT32_MAX */
+#endif /* ULONG_MAX == UINT32_MAX && LONG_MAX == INT32_MAX */
 
 /**
  * Interpret the passed buffer as an ascii representation of a unsigned integer
@@ -3641,17 +3567,20 @@ int coap_parse_long(const void * const ascii, const size_t len, long * const out
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
 int coap_parse_uint(const void * const ascii, const size_t len, unsigned * const out)
 {
-    int rc;
+    if (out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
     unsigned long ulong;
     if ((rc = coap_parse_ulong(ascii, len, &ulong))) {
         return rc;
     }
     if (ulong > UINT_MAX) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
     *out = ulong;
     return 0;
@@ -3667,17 +3596,20 @@ int coap_parse_uint(const void * const ascii, const size_t len, unsigned * const
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_int(const void * const ascii, const size_t len, int * const out)
+coap_code_t coap_parse_int(const void * const ascii, const size_t len, int * const out)
 {
-    int rc;
+    if (out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
     long slong;
     if ((rc = coap_parse_long(ascii, len, &slong))) {
         return rc;
     }
     if (slong < INT_MIN || slong > INT_MAX) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
     *out = slong;
     return 0;
