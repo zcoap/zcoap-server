@@ -39,8 +39,8 @@ add_library(zcoap-server
             src/config.h
             src/zcoap-server.c
             src/zcoap-server.h
-            src/zsnprintf.c
-            src/zsnprintf.h)
+            zsnprintf/zsnprintf.c
+            zsnprintf/zsnprintf.h)
 
 #------------------------------------------------------------------------------
 #Set properties for executable targets based on platform
