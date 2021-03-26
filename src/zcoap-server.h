@@ -181,7 +181,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
+#define ZCOAP_METHOD_SIGNATURE coap_sub_map_t * const subs, coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -194,7 +194,9 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  * @param ... zero or more COAP_FMT indicators, terminated with ZCOAP_FMT_SENTINEL
  */
 #define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; } \
-    coap_process_observe_req(node, req, nopts, opts, ct);
+    if (coap_process_observe_req(subs, node, req, nopts, opts, ct)) { \
+        return; \
+    } \
 
 typedef uint16_t coap_msg_id_t;
 #define COAP_BITS_TKL 4
@@ -343,6 +345,14 @@ struct coap_sub_s {
 };
 typedef uint32_t coap_obs_seq_t;
 #define COAP_OBS_SEQ_BITS 24
+
+typedef struct coap_sub_map_s {
+    coap_subscriber_t **subscribers; // sorted on endpoint
+    size_t n_subscribers;
+    coap_sub_t **subtokmap; // sorted on endpoint+token
+    size_t n_subscriptions;
+    coap_sub_t **subidmap; // sorted on endpoint+id
+} coap_sub_map_t;
 
 // End RFC 7651 Observable structures
 
@@ -560,11 +570,11 @@ extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
-extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
-extern coap_code_t coap_publish(coap_node_t * const node);
-extern coap_code_t coap_publish_all(void);
-extern void coap_garbage_collect(void); // garbage collect observer subscriptions
-extern void coap_cancel_all(void); // cancel all observer subscriptions
+extern coap_code_t coap_process_observe_req(coap_sub_map_t *map, coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
+extern coap_code_t coap_publish(coap_node_t *node);
+extern coap_code_t coap_publish_all(coap_sub_map_t *map);
+extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
+extern void coap_cancel_all(coap_sub_map_t *map); // cancel all observer subscriptions
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);
@@ -656,7 +666,7 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #endif
 
 extern void coap_init(coap_node_t root); // <- init must be called against any URI trees before it is passed to the server!
-extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry point!
+extern void coap_rx(coap_req_data_t* req, coap_node_t root, coap_sub_map_t *subs); // <- server entry point!
 
 extern coap_node_t wellknown_uri;
 

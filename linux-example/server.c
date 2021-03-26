@@ -46,6 +46,7 @@ static void error(const char *fmt, ...)
 
 pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
 static bool exit_request = false;
+static coap_sub_map_t subs = { 0 };
 /*
 static int sub_timer_create(const float period)
 {
@@ -121,12 +122,12 @@ static void *poll_subscriptions(void *arg)
     */
     while (!exit_request) {
         sleep(1);//read(timerfd, &missed, sizeof(missed));
-        coap_publish_all();
-        coap_garbage_collect();
+        coap_publish_all(&subs);
+        coap_garbage_collect(&subs);
     }
 
     // Notify all subscribers we are going down.
-    coap_cancel_all();
+    coap_cancel_all(&subs);
 
     // Cleanup and return.
     //close(timerfd);
@@ -212,7 +213,7 @@ static void dispatch(int sockfd, coap_node_t root, struct sockaddr_in *cli_addr,
         .len = len,
         .responder = &coap_udp_respond,
     };
-    coap_rx(&req, root);
+    coap_rx(&req, root, &subs);
 }
 
 /**
