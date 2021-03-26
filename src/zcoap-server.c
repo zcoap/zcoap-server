@@ -1017,9 +1017,11 @@ void coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const
     coap_opt_t lopts[nopts + 1];
 #else
     // Non-C99 platforms don't permit a variable-length array.  So we must
-    // statically allocate and must choose some reasonable limit.  If our
-    // outgoing message exceeds this limit, we must simply ignore the request.
-    ZCOAP_ASSERT(nopts + 1 <= ZCOAP_MAX_PAYLOAD_OPTS);
+    // choose some reasonable limit and statically allocate.
+    if (nopts + 1 > ZCOAP_MAX_PAYLOAD_OPTS) {
+        coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
+        return;
+    }
     const coap_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
     if (req->state.obs) {
@@ -1042,7 +1044,7 @@ void coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const
         rsp = &sbuf.typed;
     } else if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
-	return;
+        return;
     }
     uint8_t *pl_ptr;
     ZCOAP_ASSERT((pl_ptr = populate_rsp_header(req, code, nopts, opts, rsp)) != NULL);
@@ -1316,7 +1318,7 @@ __attribute__((nonnull (1, 2)))
 #endif
 coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
 {
-    ZCOAP_ASSERT(req != NULL && nopts != NULL);
+    ZCOAP_ASSERT(req != NULL && req->msg != NULL && nopts != NULL);
     if (req->len < sizeof(coap_msg_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -1340,11 +1342,7 @@ coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
         }
         ++*nopts;
     }
-    if (*nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }  else {
-        return 0;
-    }
+    return 0;
 }
 
 /**
@@ -1361,7 +1359,7 @@ __attribute__((nonnull (1, 3)))
 #endif
 coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* const opts)
 {
-    ZCOAP_ASSERT(req != NULL && opts != NULL);
+    ZCOAP_ASSERT(req != NULL && req->msg != NULL && opts != NULL);
     if (req->len < sizeof(coap_msg_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -1416,36 +1414,42 @@ static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, 
         return rc;
     }
     if (nopts == 0) {
+        *ct = ZCOAP_FMT_NONE;
         return 0;
     }
-    coap_msg_opt_t *ct_opt = NULL;
+    coap_msg_opt_t ct_opt = { 0 };
     // In the bsearch, we will find *an* occurrence of a content-format option.
     // If the requesting agent has enclosed more than one, that's a protocol
     // violation on their part and not our problem.
     if (opts == NULL) {
-
+        if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
 #ifdef __GNUC__
         coap_msg_opt_t lopts[nopts]; // allocate temp pointer array on the stack
 #else
-        // coap_count_opts bounds checks nopts for us - nopts will fit
-        // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
         coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
-
         if ((rc = coap_get_opts(req, nopts, lopts))) {
             return rc;
         }
         const coap_msg_opt_t key = { .num = needle };
-        ct_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+        coap_msg_opt_t *_ct_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+        if (_ct_opt == NULL) {
+            *ct = ZCOAP_FMT_NONE;
+            return 0;
+        }
+        ct_opt = *_ct_opt;
     } else {
         const coap_msg_opt_t key = { .num = needle };
-        ct_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        coap_msg_opt_t *_ct_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (_ct_opt == NULL) {
+            *ct = ZCOAP_FMT_NONE;
+            return 0;
+        }
+        ct_opt = *_ct_opt;
     }
-    if (ct_opt == NULL) {
-        *ct = ZCOAP_FMT_NONE;
-        return 0;
-    }
-    if (!ct_opt->len) {
+    if (!ct_opt.len) {
         // Per RFC 7252, a zero-length option value field is simply
         // empty.  And this is legal for the content format
         // designator.  We'll interpret this as unspecified / don't
@@ -1453,19 +1457,19 @@ static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, 
         // where no content format option was included at all.
         return 0;
     }
-    if (ct_opt->len > sizeof(coap_ct_t)) {
+    if (ct_opt.len > sizeof(coap_ct_t)) {
         // Per RFC6690, content format option value should be 65535 or less.
         // We will therefore only accept 0, 1 and 2-byte value fields.  We
         // suppose a client could pack a 2-byte big-endian content type into
         // *more* bytes, but this seems an odd abuse of the wire format.
         // Reject!
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-    } else if (ct_opt->len == sizeof(coap_ct_t)) {
+    } else if (ct_opt.len == sizeof(coap_ct_t)) {
         uint16_t netshort;
-        ZCOAP_MEMCPY(&netshort, ct_opt->val, sizeof(netshort));
+        ZCOAP_MEMCPY(&netshort, ct_opt.val, sizeof(netshort));
         *ct = ZCOAP_NTOHS(netshort);
     } else {
-        *ct = *(uint8_t *)ct_opt->val;
+        *ct = *(uint8_t *)ct_opt.val;
     }
     return 0;
 }
@@ -1863,11 +1867,13 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
         return;
     }
     // Parse options array.
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        coap_status_rsp(req, rc);
+        return;
+    }
 #ifdef __GNUC__
     coap_msg_opt_t opts[nopts];
 #else
-    // coap_count_opts bounds checks nopts for us - nopts will fit
-    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
     coap_msg_opt_t opts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
@@ -2891,11 +2897,12 @@ coap_code_t coap_count_query_opts(coap_req_data_t* const req, size_t nopts, cons
         *nqueryopts = 0;
         return 0;
     }
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
 #ifdef __GNUC__
     coap_msg_opt_t lopts[nopts];
 #else
-    // coap_count_opts bounds checks nopts for us - nopts will fit
-    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
     coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
@@ -2961,11 +2968,12 @@ coap_code_t coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const 
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
 
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
 #ifdef __GNUC__
     coap_msg_opt_t lopts[nopts];
 #else
-    // coap_count_opts bounds checks nopts for us - nopts will fit
-    // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
     coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
@@ -3030,14 +3038,15 @@ uint8_t coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_
     // In the bsearch, we will find *an* occurrence of a size1 option. If the
     // requesting agent has enclosed more than one, that's a protocol violation
     // on their part and not our problem.
-    coap_msg_opt_t *msg_size1;
+    coap_msg_opt_t msg_size1;
     if (opts == NULL) {
 
+        if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
 #ifdef __GNUC__
         coap_msg_opt_t lopts[nopts];
 #else
-        // coap_count_opts bounds checks nopts for us - nopts will fit
-        // and is less than or equal to ZCOAP_MAX_PAYLOAD_OPTS.
         coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
@@ -3045,33 +3054,35 @@ uint8_t coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_
             return rc;
         }
         const coap_msg_opt_t key = { .num = COAP_OPT_SIZE1 };
-        msg_size1 = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
-        if (msg_size1 == NULL) {
+        coap_msg_opt_t *_msg_size1 = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+        if (_msg_size1 == NULL) {
             *found = false;
             return 0;
         }
+        msg_size1 = *_msg_size1;
     } else {
         const coap_msg_opt_t key = { .num = COAP_OPT_SIZE1 };
-        msg_size1 = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
-        if (msg_size1 == NULL) {
+        coap_msg_opt_t *_msg_size1 = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (_msg_size1 == NULL) {
             *found = false;
             return 0;
         }
+        msg_size1 = *_msg_size1;
     }
     *found = true;
-    if (!msg_size1->len) {
+    if (!msg_size1.len) {
         // Per RFC 7252, a zero-length option value field is simply empty.  And
         // this is legal for the size1 designator.  We'll interpret this as
         // unspecified / don't care.  To the caller, this will be equivalent to
         // the case where no size1 option was included at all.
         *found = false;
         return 0;
-    } else if (msg_size1->len > sizeof(uint32_t)) {
+    } else if (msg_size1.len > sizeof(uint32_t)) {
         // size1 values larger than 4 bytes violate the RFC
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
     }
     memset(size1, 0, sizeof(*size1));
-    ZCOAP_MEMCPY(size1, msg_size1->val, msg_size1->len);
+    ZCOAP_MEMCPY(size1, msg_size1.val, msg_size1.len);
     *size1 = ZCOAP_NTOHL(*size1);
     return 0;
 }
