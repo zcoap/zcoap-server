@@ -35,6 +35,7 @@
 
 #define RESPONSE_FMT_U16 RESPONSE_FMT_UINT
 #define RESPONSE_FMT_I16 RESPONSE_FMT_INT
+
 #if UINT32_MAX == UINT_MAX
 #define FMT32 ""
 #define RESPONSE_FMT_U32 RESPONSE_FMT_UINT
@@ -46,14 +47,15 @@
 #else
 #error cannot determine appropriate format specifiers for 32-bit integers!
 #endif
-#if UINT64_MAX == ULONG_MAX
-#define FMT64 "l"
-#define RESPONSE_FMT_U64 RESPONSE_FMT_ULONG
-#define RESPONSE_FMT_I64 RESPONSE_FMT_LONG
-#elif UINT64_MAX == ULLONG_MAX
+
+#if UINT64_MAX == ULLONG_MAX
 #define FMT64 "ll"
 #define RESPONSE_FMT_U64 RESPONSE_FMT_ULLONG
 #define RESPONSE_FMT_I64 RESPONSE_FMT_LLONG
+#elif UINT64_MAX == ULONG_MAX
+#define FMT64 "l"
+#define RESPONSE_FMT_U64 RESPONSE_FMT_ULONG
+#define RESPONSE_FMT_I64 RESPONSE_FMT_LONG
 #else
 #error cannot determine appropriate format specifiers for 64-bit integers!
 #endif
@@ -1039,8 +1041,7 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
 #else
     // Non-C99 platforms don't permit a variable-length array.  So we must
     // statically allocate and must choose some reasonable limit.  If our
-    // outgoing message exceeds this limit, we must simply issue an error
-    // response.
+    // outgoing message exceeds this limit, we must simply ignore the request.
     if (nopts + 1 > ZCOAP_MAX_PAYLOAD_OPTS) {
         coap_discard(req);
         return;
@@ -1062,18 +1063,11 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     }
     // Allocate our response PDU.  Keep it on the stack if we can.
     coap_msg_t *rsp;
-#ifdef __GNUC__
-    union {
-        uint8_t opaque[alen <= ZCOAP_MAX_BUF_SIZE ? alen : 0];
-        coap_msg_t typed;
-    } sbuf;
-#else
     union {
         uint8_t opaque[ZCOAP_MAX_BUF_SIZE];
         coap_msg_t typed;
     } sbuf;
-#endif
-    if (alen <= ZCOAP_MAX_BUF_SIZE) {
+    if (alen <= sizeof(sbuf)) {
         rsp = &sbuf.typed;
     } else if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
         goto coap_rsp_cleanup;
