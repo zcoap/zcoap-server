@@ -3214,14 +3214,18 @@ coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t op
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long long * const out)
+coap_code_t coap_parse_ullong(const void * const ascii, const size_t len, unsigned long long * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3235,7 +3239,7 @@ int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long 
     char *endptr = NULL;
     *out = strtoull(buf, &endptr, 0);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (*out == ULLONG_MAX) {
         // Our c library's strtoull may not set errno, or may not have any
         // thread safety around errno.  So we must manually verify the passed
@@ -3252,7 +3256,7 @@ int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long 
                 && !strpbrk(tok + strlen("ffffffffffffffff"), "0123456789abcdefABCDEF")) {
                return 0;
             } else {
-                return EINVAL;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
         } else if (   (tok = strstr(buf, "18446744073709551615"))
                    && !strpbrk(tok + strlen("18446744073709551615"), "0123456789")) {
@@ -3261,7 +3265,7 @@ int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long 
                    && !strpbrk(tok + strlen("01777777777777777777777"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
@@ -3318,14 +3322,18 @@ int coap_parse_ullong(const void * const ascii, const size_t len, unsigned long 
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_llong(const void * const ascii, const size_t len, long long * const out)
+coap_code_t coap_parse_llong(const void * const ascii, const size_t len, long long * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3339,7 +3347,7 @@ int coap_parse_llong(const void * const ascii, const size_t len, long long * con
     char *endptr = NULL;
     *out = strtoll(buf, &endptr, 0);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (*out == LLONG_MAX) {
         // Our c library's strtull may not set errno, or may not have any
         // thread safety around errno.  So we must manually verify the passed
@@ -3354,9 +3362,9 @@ int coap_parse_llong(const void * const ascii, const size_t len, long long * con
             }
             if (   (tok = strstr(tok, "7fffffffffffffff"))
                 && !strpbrk(tok + strlen("7fffffffffffffff"), "0123456789abcdefABCDEF")) {
-               return 0;
+                return 0;
             } else {
-                return EINVAL;
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
             }
         } else if (   (tok = strstr(buf, "9223372036854775807"))
                    && !strpbrk(tok + strlen("9223372036854775807"), "0123456789")) {
@@ -3365,7 +3373,7 @@ int coap_parse_llong(const void * const ascii, const size_t len, long long * con
                    && !strpbrk(tok + strlen("0777777777777777777777"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     } else if (*out == LLONG_MIN) {
         // Likewise, verify that buffer isn't actually specifying LLONG_MIN.
@@ -3380,7 +3388,7 @@ int coap_parse_llong(const void * const ascii, const size_t len, long long * con
                    && !strpbrk(tok + strlen("01000000000000000000000"), "01234567")) {
             return 0;
         } else {
-            return EINVAL;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
         }
     }
     return 0;
@@ -3722,14 +3730,18 @@ int coap_parse_int(const void * const ascii, const size_t len, int * const out)
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_float(const void * const ascii, const size_t len, float * const out)
+coap_code_t coap_parse_float(const void * const ascii, const size_t len, float * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3743,14 +3755,14 @@ int coap_parse_float(const void * const ascii, const size_t len, float * const o
     char *endptr = NULL;
     *out = strtof(buf, &endptr);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (fabsf(*out) == HUGE_VALF) {
-        return ERANGE; // presume overflow
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ); // presume overflow
     } else {
         int exponent;
         frexpf(*out, &exponent);
         if (exponent <= -126) { // 2^-126 is the smallest normal single-precision IEEE-754 float
-            return ERANGE; // presume underflow
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ); // presume underflow
         }
     }
     return 0;
@@ -3803,14 +3815,18 @@ int coap_parse_float(const void * const ascii, const size_t len, float * const o
  * @param ascii text to parse
  * @param len text length in bytes
  * @param out (out) number parsed from the caller-provided text
- * @return 0 on success, an appropriate errno on error
+ * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE * const out)
+coap_code_t coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE * const out)
 {
+    if (ascii == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
     // We bounds check incoming data for ZCOAP_MAX_BUF_SIZE.  We can't allow
     // clients to inject data that will grow our stack unreasonably.
     if (len >= ZCOAP_MAX_BUF_SIZE) {
-        return ENOMEM;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
     }
 
 #ifdef __GNUC__
@@ -3824,14 +3840,14 @@ int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE *
     char *endptr = NULL;
     *out = strtod(buf, &endptr);
     if (!endptr || endptr == buf) {
-        return EINVAL;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     } else if (fabs(*out) == HUGE_VAL) {
-        return ERANGE; // presume overflow
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ); // presume overflow
     } else {
         int exponent;
         frexp(*out, &exponent);
         if (exponent <= -1022) { // 2^-1022 is the smallest normal double-precision IEEE-754 float
-            return ERANGE; // presume underflow
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ); // presume underflow
         }
     }
     return 0;
@@ -3845,13 +3861,11 @@ int coap_parse_double(const void * const ascii, const size_t len, ZCOAP_DOUBLE *
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(2, 3)))
-#endif
-coap_parse_cbor_u64(size_t len, const void *payload, uint64_t * const out)
+static coap_code_t coap_parse_cbor_u64(size_t len, const void *payload, uint64_t * const out)
 {
-    // null-checks in caller
+    if (payload == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (len < sizeof(cbor_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -3971,13 +3985,9 @@ coap_parse_cbor_u64(size_t len, const void *payload, uint64_t * const out)
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payload, uint64_t * const out)
+coap_code_t coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payload, uint64_t * const out)
 {
-    if (payload == NULL || out == NULL) {
+    if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     switch (ct) {
@@ -3992,15 +4002,10 @@ coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payl
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
     // Use ASCII parser below.
-    int ec;
+    coap_code_t rc;
     unsigned long long ullong;
-    if ((ec = coap_parse_ullong(payload, len, &ullong))) {
-        switch (ec) {
-            case ENOMEM:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-            default:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        }
+    if ((rc = coap_parse_ullong(payload, len, &ullong))) {
+        return rc;
     }
     if (ullong > UINT64_MAX) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -4017,13 +4022,11 @@ coap_parse_req_u64(const coap_ct_t ct, const size_t len, const void * const payl
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(2, 3)))
-#endif
-coap_parse_cbor_i64(size_t len, const void *payload, int64_t * const out)
+static coap_code_t coap_parse_cbor_i64(size_t len, const void *payload, int64_t * const out)
 {
-    // null-checks in caller
+    if (payload == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (len < sizeof(cbor_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -4159,11 +4162,7 @@ coap_parse_cbor_i64(size_t len, const void *payload, int64_t * const out)
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payload, int64_t * const out)
+coap_code_t coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payload, int64_t * const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -4180,15 +4179,10 @@ coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payl
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
     // Use ASCII parser below.
-    int ec;
+    coap_code_t rc;
     long long llong;
-    if ((ec = coap_parse_llong(payload, len, &llong))) {
-        switch (ec) {
-            case ENOMEM:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-            default:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        }
+    if ((rc = coap_parse_llong(payload, len, &llong))) {
+        return rc;
     }
     if (llong < INT64_MIN || llong > INT64_MAX) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
@@ -4205,13 +4199,11 @@ coap_parse_req_i64(const coap_ct_t ct, const size_t len, const void * const payl
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(2, 3)))
-#endif
-coap_parse_cbor_float(size_t len, const void *payload, float * const out)
+static coap_code_t coap_parse_cbor_float(size_t len, const void *payload, float * const out)
 {
-    // null-checks in caller
+    if (payload == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (len < sizeof(cbor_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -4331,15 +4323,8 @@ coap_parse_cbor_float(size_t len, const void *payload, float * const out)
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const payload, float * const out)
+coap_code_t coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const payload, float * const out)
 {
-    if (payload == NULL || out == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
     switch (ct) {
         case COAP_FMT_CBOR:
             return coap_parse_cbor_float(len, payload, out);
@@ -4352,17 +4337,7 @@ coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const pa
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
     // Use ASCII parser below.
-    int ec;
-    size_t size1;
-    if ((ec = coap_parse_float(payload, len, out))) {
-        switch (ec) {
-            case ENOMEM:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-            default:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        }
-    }
-    return 0;
+    return coap_parse_float(payload, len, out);
 }
 
 /**
@@ -4373,13 +4348,11 @@ coap_parse_req_float(const coap_ct_t ct, const size_t len, const void * const pa
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(2, 3)))
-#endif
-coap_parse_cbor_double(size_t len, const void *payload, ZCOAP_DOUBLE * const out)
+static coap_code_t coap_parse_cbor_double(size_t len, const void *payload, ZCOAP_DOUBLE * const out)
 {
-    // null-checks in caller
+    if (payload == NULL || out == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
     if (len < sizeof(cbor_t)) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -4496,15 +4469,8 @@ coap_parse_cbor_double(size_t len, const void *payload, ZCOAP_DOUBLE * const out
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_double(const coap_ct_t ct, const size_t len, const void* const payload, ZCOAP_DOUBLE* const out)
+coap_code_t coap_parse_req_double(const coap_ct_t ct, const size_t len, const void* const payload, ZCOAP_DOUBLE* const out)
 {
-    if (out == NULL) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
     switch (ct) {
         case COAP_FMT_CBOR:
             return coap_parse_cbor_double(len, payload, out);
@@ -4517,17 +4483,7 @@ coap_parse_req_double(const coap_ct_t ct, const size_t len, const void* const pa
     // Payload is plain text, or content format unspecified.  For maximum
     // compatibility, we presume plain text when content format is unspecified.
     // Use ASCII parser below.
-    int ec;
-    size_t size1;
-    if ((ec = coap_parse_double(payload, len, out))) {
-        switch (ec) {
-            case ENOMEM:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_TOO_LARGE);
-            default:
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-        }
-    }
-    return 0;
+    return coap_parse_double(payload, len, out);
 }
 
 // Shallow 16-bit and 32-bit wrappers for the uint64 and int64 parsers
@@ -4541,11 +4497,7 @@ coap_parse_req_double(const coap_ct_t ct, const size_t len, const void* const pa
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void* const payload, uint32_t* const out)
+coap_code_t coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void* const payload, uint32_t* const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -4572,11 +4524,7 @@ coap_parse_req_u32(const coap_ct_t ct, const size_t len, const void* const paylo
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void* const payload, int32_t* const out)
+coap_code_t coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void* const payload, int32_t* const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -4603,11 +4551,7 @@ coap_parse_req_i32(const coap_ct_t ct, const size_t len, const void* const paylo
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void* const payload, uint16_t* const out)
+coap_code_t coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void* const payload, uint16_t* const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -4634,11 +4578,7 @@ coap_parse_req_u16(const coap_ct_t ct, const size_t len, const void* const paylo
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void* payload, int16_t* const out)
+coap_code_t coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void* payload, int16_t* const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -4666,11 +4606,7 @@ coap_parse_req_i16(const coap_ct_t ct, const size_t len, const void* payload, in
  * @param out (out) caller-allocated write location for value parsed from request payload
  * @return 0 on success, non-zero CoAP status code (4.00-class or 5.00-class) on failure
  */
-coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull(3, 4)))
-#endif
-coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void* const payload, bool* const out)
+coap_code_t coap_parse_req_bool(const coap_ct_t ct, const size_t len, const void* const payload, bool* const out)
 {
     if (out == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
