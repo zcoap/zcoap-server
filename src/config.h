@@ -141,7 +141,7 @@
 /**
  * ZCOAP_SNPRINTF
  *
- * What snprintf shoudl the zcoap-server use?  By default, for speed and
+ * What snprintf should the zcoap-server use?  By default, for speed and
  * to achieve reentrance on platforms where this is NOT assured, we use our
  * own!
  */

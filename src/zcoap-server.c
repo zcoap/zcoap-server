@@ -2245,7 +2245,7 @@ static void coap_unlock(const coap_node_t *node)
  */
 static coap_sub_map_t *coap_sub_map(const coap_node_t *node)
 {
-    return coap_get_root(node)->sub_map;
+    return coap_get_root(node)->tsubs;
 }
 
 /**
@@ -2279,7 +2279,7 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
     coap_sub_t needle = { .node = node, .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     coap_sub_t **_subscription = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp) : NULL;
     coap_sub_t *subscription = _subscription ? *_subscription : NULL;
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: subscription=%p", __func__, subscription);
@@ -2294,7 +2294,7 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
     } else {
         coap_code_t coap_code;
         if ((coap_code = alloc_sub_id(map, req, &needle))) {
-	    ZCOAP_UNLOCK(map->lock);
+	    ZCOAP_UNLOCK(&map->lock);
             return coap_code;
         }
         coap_sub_t **resized_toks = ZCOAP_REALLOC(map->subtokmap, sizeof(map->subtokmap[0]) * (map->n_subscriptions + 1));
@@ -2319,7 +2319,7 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
                 subscription = NULL;
             }
             free_sub_id(map, &needle);
-	    ZCOAP_UNLOCK(map->lock);
+	    ZCOAP_UNLOCK(&map->lock);
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: subscription allocation failed", __func__);
             return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
@@ -2332,16 +2332,16 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
         qsort(map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: added subscription=%p for token 0x%"FMT64"X", __func__, subscription, subscription->token);
     }
-    if (node->subs) {
-        node->subs->pnext = &subscription->next;
+    if (node->nsubs) {
+        node->nsubs->pnext = &subscription->next;
     }
-    subscription->next = node->subs; // O(1) insertion at beginning of subscription list
-    subscription->pnext = &node->subs;
-    node->subs = subscription;
+    subscription->next = node->nsubs; // O(1) insertion at beginning of subscription list
+    subscription->pnext = &node->nsubs;
+    node->nsubs = subscription;
     subscription->ct = ct;
     req->state.obs = true;
     req->state.seq = node->seq;
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     return 0;
 }
 
@@ -2422,10 +2422,10 @@ coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
     coap_sub_t needle = { .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     coap_sub_t **sub = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp) : NULL;
     if (sub == NULL) {
-        ZCOAP_UNLOCK(map->lock);
+        ZCOAP_UNLOCK(&map->lock);
         return 0; // not found; no-op
     }
     // Yes, publish current observaton sequence number to
@@ -2433,7 +2433,7 @@ coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
     req->state.obs = true;
     req->state.obs = node->seq;
     free_subscription(map, sub);
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     return 0;
 }
 
@@ -2565,8 +2565,8 @@ coap_code_t coap_publish(coap_node_t * const node)
     req->ver = COAP_VERSION;
     coap_sub_map_t *map = coap_sub_map(node);
     ZCOAP_ASSERT(node->observable && node->singleton && map != NULL);
-    ZCOAP_LOCK(map->lock);
-    coap_sub_t *sub = node->subs;
+    ZCOAP_LOCK(&map->lock);
+    coap_sub_t *sub = node->nsubs;
     while (sub) {
         if (window_full(sub->window_left, sub->window_right)) {
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%"FMT64"X (left=0x%04X, right=0x%04X)",
@@ -2589,7 +2589,7 @@ coap_code_t coap_publish(coap_node_t * const node)
         ++sub->window_right;
         sub = sub->next;
     }
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     return rc;
 }
 
@@ -2662,7 +2662,7 @@ coap_code_t coap_publish_all(coap_sub_map_t * const map)
 {
     ZCOAP_ASSERT(map != NULL);
     coap_code_t rc = 0;
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     static bool instance = false;
     instance = instance ? false : true;
     for (size_t i = 0; i < map->n_subscriptions; ++i) {
@@ -2670,7 +2670,7 @@ coap_code_t coap_publish_all(coap_sub_map_t * const map)
         coap_code_t code = coap_publish_one(sub, instance);
         rc = !rc ? code : rc;
     }
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     return rc;
 }
 
@@ -2691,7 +2691,7 @@ __attribute__((nonnull (1, 2)))
 coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(ack != NULL && root != NULL);
-    coap_sub_map_t * const map = root->sub_map;
+    coap_sub_map_t * const map = root->tsubs;
     if (map == NULL || ack->endpoint_cmp == NULL) {
         coap_discard(ack);
         return;
@@ -2699,14 +2699,14 @@ coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
     coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = ack->endpoint_cmp };
     coap_sub_t needle = { .subscriber = &subscriber, .msg_ID = ack->msg->msg_ID };
     coap_sub_t *key = &needle;
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     coap_sub_t **sub = map->subidmap ? bsearch(&key, map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp) : NULL;
     if (sub != NULL) {
         if (id_in_sub_window(needle.rsp_id, (*sub)->window_left, (*sub)->window_right)) {
             (*sub)->window_left = needle.rsp_id;
         }
     }
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     coap_discard(ack);
 }
 
@@ -2725,12 +2725,12 @@ __attribute__((nonnull (1, 2)))
 coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(reset != NULL && root != NULL);
-    coap_sub_map_t * const map = root->sub_map;
+    coap_sub_map_t * const map = root->tsubs;
     if (map == NULL || reset->endpoint_cmp == NULL) {
         coap_discard(reset);
         return;
     }
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2744,7 +2744,7 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: reset received, removing subscription=%p, token 0x%"FMT64"X for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         free_subscription(map, sub);
     }
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
     coap_discard(reset);
 }
 
@@ -2795,7 +2795,7 @@ coap_notify(coap_sub_t *sub, coap_code_t code)
  */
 void coap_garbage_collect(coap_sub_map_t* const map)
 {
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2810,7 +2810,7 @@ void coap_garbage_collect(coap_sub_map_t* const map)
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
-    ZCOAP_UNLOCK(map->lock);
+    ZCOAP_UNLOCK(&map->lock);
 }
 
 /**
@@ -2820,7 +2820,7 @@ void coap_garbage_collect(coap_sub_map_t* const map)
  */
 void coap_cancel_all(coap_sub_map_t * const map)
 {
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2829,7 +2829,7 @@ void coap_cancel_all(coap_sub_map_t * const map)
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
-    ZCOAP_LOCK(map->lock);
+    ZCOAP_LOCK(&map->lock);
 }
 
 /*********** End RFC7651 observation request utility functions. ************/

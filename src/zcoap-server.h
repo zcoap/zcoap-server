@@ -352,7 +352,7 @@ typedef struct coap_sub_map_s {
     coap_sub_t **subtokmap; // sorted on endpoint+token
     size_t n_subscriptions;
     coap_sub_t **subidmap; // sorted on endpoint+id
-    coap_lock_t *lock;
+    coap_lock_t lock;
 } coap_sub_map_t;
 
 // End RFC 7651 Observable structures
@@ -536,8 +536,8 @@ __attribute__((nonnull (1, 2, 3)))
 struct coap_node_s {
     coap_obs_seq_t seq : COAP_OBS_SEQ_BITS; // observation sequence number
     union {
-        coap_sub_t *subs; // linked-list of observable subscriptions
-        coap_sub_map_t *sub_map; // tree-wide subscription map
+        coap_sub_t *nsubs; // linked-list of a node's observable subscriptions
+        coap_sub_map_t *tsubs; // root URI map of subscriptions for the tree
     };
     coap_lock_t *lock; // node lock for multi-threaded environments
     const char *name; // node path segment

@@ -29,6 +29,8 @@
 #define PRIVATE_SERVER_PORT 12000
 #define PRIVATE_SERVER_ADDR INADDR_LOOPBACK
 
+static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER };
+
 /**
  * Emit a log message at level LOG_ERR and exit(EXIT_FAILURE).
  *
@@ -45,8 +47,6 @@ static void error(const char *fmt, ...)
 }
 
 static bool exit_request = false;
-pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
-static coap_sub_map_t subs = { .lock = &coap_lock };
 
 /**
  * Start and execute the observer subscription polling thread.
@@ -321,20 +321,19 @@ int main(int argc, char *argv[])
         [PUBLIC_TELEM_SERVERV6] = { .root = public_server_root,  .fd = -1 },
     };
 
-    // Add our lock and subscriber map.  If we wanted to have a thread-pool
-    // and allow concurrent service across several trees, we could establish
-    // separate lock for each.  Likewise, if we wanted concurrent subscription
-    // handling, we could also assign our subscription map per-tree.
-    // But we're OK sharing across all trees.
+    // Add our and subscriber map.  It is our choice as to whether our
+    // implementation encloses a map-per tree or a single map.  We choose a
+    // single map for simple publishing and garbage collection.  If we were
+    // operating a thread pool and wished to reduce tree-to-tree contention,
+    // we could instead establish a subscription map for each tree.
     for (size_t i = 0; i < NELM(servers); ++i) {
-        servers[i].root.lock = &coap_lock;
-        servers[i].root.sub_map = &subs;
+        servers[i].root.tsubs = &subs;
     }
 
     // Always initialize the CoAP URI trees before use.  Initialization sorts
     // the trees and executes node-specific initializers.  Multiple calls
     // against a given true are acceptable.  However, each tree must be
-    /// initialized at least once.
+    // initialized at least once.
     for (size_t i = 0; i < NELM(servers); ++i) {
         coap_init(servers[i].root);
     }
