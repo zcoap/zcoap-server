@@ -28,20 +28,18 @@ typedef struct sockaddr_in coap_endpoint_t;
  */
 typedef pthread_mutex_t coap_lock_t;
 #define ZCOAP_LOCK(_lock) ({\
-    pthread_mutex_lock(_lock);\
 })
 #define ZCOAP_UNLOCK(_lock) ({\
-    pthread_mutex_unlock(_lock);\
 })
 
 #include <syslog.h>
 #define ZCOAP_VLOG(_level, _fmt, _ap) ({\
-    if ((_level) < ZCOAP_LOG_DEBUG) {\
+    if ((_level) <= ZCOAP_LOG_DEBUG) {\
         vsyslog(_level, _fmt, _ap);\
     }\
 })
 #define ZCOAP_LOG(_level, _args...) ({\
-    if ((_level) < ZCOAP_LOG_DEBUG) {\
+    if ((_level) <= ZCOAP_LOG_DEBUG) {\
         syslog(_level, _args);\
     }\
 })
