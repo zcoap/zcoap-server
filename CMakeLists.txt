@@ -26,7 +26,7 @@ include_directories(win32-example src)
 ELSE()
 
 #Linux
-include_directories(linux-example src)
+include_directories(posix-example src)
 
 #set(CMAKE_CXX_FLAGS "-Werror -Wshadow")
 #set(CMAKE_C_FLAGS "-Werror -Wshadow")
@@ -60,23 +60,23 @@ target_link_libraries(example-server-win32
 
 ELSE()
 
-#Example program for Linux
-add_executable(example-server-linux
-               linux-example/platform.h
-               linux-example/server.c
-               linux-example/public.h
-               linux-example/public.c
-               linux-example/private.h
-               linux-example/private.c
-               linux-example/fs.h
-               linux-example/fs.c)
+#Example program for Posix platforms
+add_executable(example-server-posix
+               posix-example/platform.h
+               posix-example/server.c
+               posix-example/public.h
+               posix-example/public.c
+               posix-example/private.h
+               posix-example/private.c
+               posix-example/fs.h
+               posix-example/fs.c)
 
 find_package (Threads)
-target_link_libraries(example-server-linux
+target_link_libraries(example-server-posix
                       zcoap-server
                       ${CMAKE_THREAD_LIBS_INIT}
                       m)
-target_compile_options(example-server-linux PRIVATE -Werror -Wshadow)
+target_compile_options(example-server-posix PRIVATE -Werror -Wshadow)
 
 ENDIF()
 
