@@ -64,11 +64,11 @@ static void *poll_subscriptions(void *arg)
     useconds_t usecs = (period - (unsigned)period) * 1e6;
     while (!exit_request) {
         if (seconds) {
-	    sleep(seconds);
-        }	
-	if (usecs) {
-	    usleep(usecs);
-	}
+            sleep(seconds);
+        }
+        if (usecs) {
+            usleep(usecs);
+        }
         coap_publish_all(&subs);
         coap_garbage_collect(&subs);
     }
@@ -123,9 +123,9 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
 
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "Sent %ld bytes back to client at addr %s%s%s:%u!\n", sent,
               cli_addr->sin_family == AF_INET6 ? "[" : "",
-	      inet_ntoa(cli_addr->sin_addr),
+              inet_ntoa(cli_addr->sin_addr),
               cli_addr->sin_family == AF_INET6 ? "]" : "",
-	      cli_addr->sin_port);
+              cli_addr->sin_port);
 }
 
 /**
