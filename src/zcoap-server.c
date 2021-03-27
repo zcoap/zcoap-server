@@ -29,8 +29,8 @@
 #define RESPONSE_FMT_INT "%d"
 #define RESPONSE_FMT_ULONG "%lu"
 #define RESPONSE_FMT_LONG "%ld"
-#define RESPONSE_FMT_ULLONG "0x%llX" /* 64-biit decimal printing can be truncated by znsprintf; hex printing works though */
-#define RESPONSE_FMT_LLONG RESPONSE_FMT_ULLONG
+#define RESPONSE_FMT_ULLONG "%llu"
+#define RESPONSE_FMT_LLONG "%lld"
 #define RESPONSE_FMT_FLOAT "%.8g"
 
 #define RESPONSE_FMT_U16 RESPONSE_FMT_UINT
