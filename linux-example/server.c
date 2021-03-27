@@ -44,9 +44,9 @@ static void error(const char *fmt, ...)
     exit(EXIT_FAILURE);
 }
 
-pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
 static bool exit_request = false;
-static coap_sub_map_t subs = { 0 };
+pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
+static coap_sub_map_t subs = { .lock = &coap_lock };
 /*
 static int sub_timer_create(const float period)
 {
@@ -213,7 +213,7 @@ static void dispatch(int sockfd, coap_node_t root, struct sockaddr_in *cli_addr,
         .len = len,
         .responder = &coap_udp_respond,
     };
-    coap_rx(&req, root, &subs);
+    coap_rx(&req, root);
 }
 
 /**
@@ -374,6 +374,16 @@ int main(int argc, char *argv[])
         [PUBLIC_TELEM_SERVER]   = { .root = public_server_root,  .fd = -1 },
         [PUBLIC_TELEM_SERVERV6] = { .root = public_server_root,  .fd = -1 },
     };
+
+    // Add our lock and subscriber map.  If we wanted to have a thread-pool
+    // and allow concurrent service across several trees, we could establish
+    // separate lock for each.  Likewise, if we wanted concurrent subscription
+    // handling, we could also assign our subscription map per-tree.
+    // But we're OK sharing across all trees.
+    for (size_t i = 0; i < NELM(servers); ++i) {
+        servers[i].root.lock = &coap_lock;
+        servers[i].root.sub_map = &subs;
+    }
 
     // Always initialize the CoAP URI trees before use.  Initialization sorts
     // the trees and executes node-specific initializers.  Multiple calls

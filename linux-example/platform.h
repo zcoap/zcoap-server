@@ -26,12 +26,12 @@ typedef struct sockaddr_in coap_endpoint_t;
 /*
  * We are multithreaded.  Give the zcoap server some locking primitives.
  */
-extern pthread_mutex_t coap_lock;
-#define ZCOAP_LOCK(void) ({\
-    pthread_mutex_lock(&coap_lock);\
+typedef pthread_mutex_t coap_lock_t;
+#define ZCOAP_LOCK(_lock) ({\
+    pthread_mutex_lock(_lock);\
 })
-#define ZCOAP_UNLOCK(void) ({\
-    pthread_mutex_unlock(&coap_lock);\
+#define ZCOAP_UNLOCK(_lock) ({\
+    pthread_mutex_unlock(_lock);\
 })
 
 #include <syslog.h>

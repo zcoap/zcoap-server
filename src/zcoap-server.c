@@ -357,7 +357,7 @@ href_match(const char* name, const href_filter_t* href_filter)
 // This allows passage of different parameters when we wish to access handlers'
 // alternate function: extraction of node content type.
 #ifdef __GNUC__
-typedef void __attribute__((nonnull (2, 9))) (*ct_extractor)(const ZCOAP_METHOD_SIGNATURE);
+typedef void __attribute__((nonnull (1, 8))) (*ct_extractor)(const ZCOAP_METHOD_SIGNATURE);
 #else
 typedef void (*ct_extractor)(const ZCOAP_METHOD_SIGNATURE);
 #endif
@@ -410,7 +410,7 @@ static void print_ct(coap_node_t * const node, size_t * const len, char ** const
 {
     ct_mask_t mask = {{ 0 }};
     if (node->GET) {
-        (*(ct_extractor)node->GET)(NULL, node, NULL, 0, NULL, 0, 0, NULL, &mask);
+        (*(ct_extractor)node->GET)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
         if (mask.literal_set) {
             // Alternate literal encoding; mask is not a mask at all, but contains
             // a single content type literal in the lower byte.
@@ -419,7 +419,7 @@ static void print_ct(coap_node_t * const node, size_t * const len, char ** const
         }
     }
     if (node->PUT) {
-        (*(ct_extractor)node->PUT)(NULL, node, NULL, 0, NULL, 0, 0, NULL, &mask);
+        (*(ct_extractor)node->PUT)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
         if (mask.literal_set) {
             // Alternate literal encoding; mask is not a mask at all, but contains
             // a single content type literal in the lower byte.
@@ -428,7 +428,7 @@ static void print_ct(coap_node_t * const node, size_t * const len, char ** const
         }
     }
     if (node->POST) {
-        (*(ct_extractor)node->POST)(NULL, node, NULL, 0, NULL, 0, 0, NULL, &mask);
+        (*(ct_extractor)node->POST)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
         if (mask.literal_set) {
             // Alternate literal encoding; mask is not a mask at all, but contains
             // a single content type literal in the lower byte.
@@ -437,7 +437,7 @@ static void print_ct(coap_node_t * const node, size_t * const len, char ** const
         }
     }
     if (node->DEL) {
-        (*(ct_extractor)node->DEL)(NULL, node, NULL, 0, NULL, 0, 0, NULL, &mask);
+        (*(ct_extractor)node->DEL)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
         if (mask.literal_set) {
             // Alternate literal encoding; mask is not a mask at all, but contains
             // a single content type literal in the lower byte.
@@ -1576,7 +1576,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull (1, 4)))
 #endif
-process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], coap_node_t* const node, coap_sub_map_t* const subs)
+process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], coap_node_t* const node)
 {
     ZCOAP_ASSERT(req != NULL && req->msg != NULL && node != NULL);
     // On successful handler dispatch, return CoAP succes, 2.00.  In such a
@@ -1594,7 +1594,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->GET) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing GET for path '%s'", __func__, node->name);
-                        (*node->GET)(subs, node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: GET method unsupported for path '%s'", __func__, node->name);
@@ -1604,7 +1604,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->PUT) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing PUT for path '%s'", __func__, node->name);
-                        (*node->PUT)(subs, node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: PUT method unsupported for path '%s'", __func__, node->name);
@@ -1614,7 +1614,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->POST) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing POST for path '%s'", __func__, node->name);
-                        (*node->POST)(subs, node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: POST method unsupported for path '%s'", __func__, node->name);
@@ -1624,7 +1624,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->DEL) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing DEL for path '%s'", __func__, node->name);
-                        (*node->DEL)(subs, node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->DEL)(node, req, nopts, opts, ct, len, payload, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: DEL method unsupported for path '%s'", __func__, node->name);
@@ -1693,7 +1693,6 @@ static coap_code_t iter_req(coap_node_t* const node, const void* data);
  * @param path_opts array of path option pointers into req
  */
 typedef struct iter_req_data_s {
-    coap_sub_map_t * const subs;
     coap_req_data_t * const req;
     const size_t nopts;
     const coap_msg_opt_t *opts;
@@ -1721,7 +1720,7 @@ _iter_req(coap_node_t * const node, const void * data)
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: depth-first search at path segment '%s'", __func__, node->name);
     const iter_req_data_t *cdata = (const iter_req_data_t *)data;
     if (!cdata->npath_opts) { // Ding ding!  No more path options!  Match!
-        return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node, cdata->subs);
+        return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node);
     }
     const size_t count = coap_count_children(node);
     const coap_msg_opt_t *opt = &cdata->path_opts[0];
@@ -1836,7 +1835,6 @@ static coap_code_t iter_req(coap_node_t* const node, const void* data)
         return 0;
     }
     const iter_req_data_t cdata = {
-        .subs = pdata->subs,
         .req = pdata->req,
         .nopts = pdata->nopts,
         .opts = pdata->opts,
@@ -1857,7 +1855,7 @@ static void
 #ifdef __GNUC__
 __attribute__((nonnull (1, 2)))
 #endif
-inject_coap_req(coap_req_data_t* const req, coap_node_t* const root, coap_sub_map_t* const subs)
+inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
 {
     ZCOAP_ASSERT(req != NULL && root != NULL);
     size_t nopts;
@@ -1931,7 +1929,6 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root, coap_sub_ma
     // Dispatch.
     {
         const iter_req_data_t iter_data = {
-	    .subs = subs,
             .req = req,
             .nopts = nopts,
             .opts = nopts ? opts : NULL,
@@ -2195,40 +2192,72 @@ extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
     return 0;
 }
 
+static const coap_node_t *coap_get_root(const coap_node_t * const node)
+{
+    const coap_node_t *root = node;
+    while (root->parent) {
+        root = root->parent;
+    }
+    return root;
+}
+
+static void coap_lock(const coap_node_t *node)
+{
+    while (!node->lock && node->parent) {
+        node = node->parent;
+    }
+    if (node->lock) {
+        ZCOAP_LOCK(node->lock);
+    }
+}
+
+static void coap_unlock(const coap_node_t *node)
+{
+    while (!node->lock && node->parent) {
+        node = node->parent;
+    }
+    if (node->lock) {
+        ZCOAP_UNLOCK(node->lock);
+    }
+}
+
+static coap_sub_map_t *coap_sub_map(const coap_node_t *node)
+{
+    return coap_get_root(node)->sub_map;
+}
+
 /**
  * Add a subscription to the passed node for the requesting agent.
  *
- * @param map subscription map
  * @param req request information for the subscribing client
  * @param node (in/out) node to which to add a subscription
  * @return 0 on success, an appropriate CoAP error code on failure
  */
 static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (1, 2, 3)))
+__attribute__((nonnull (1, 2)))
 #endif
-coap_subscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
+coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
 {
-    ZCOAP_ASSERT(map != NULL && req != NULL && node != NULL);
+    ZCOAP_ASSERT(req != NULL && node != NULL);
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
     if (node->GET == NULL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
     }
-    if (!node->singleton || !node->observable) {
-        // It is impossible for non-singleton nodes to support subscriptions
-        // because they do not have a locaiton to store them.  RFC7651 says we
-        // can simply ignore observation requests against URIs that cannot
-        // support them.  That is expendient here, where we may have been
-        // called from a handler that is shared between both dynamically created
-        // and static nodes.
-        return 0;
+    if (!node->observable) {
+        return 0; // RFC7651 says we can ignore observations for URIs that do not support them.
+    }
+    coap_sub_map_t * const map = coap_sub_map(node);
+    if (!node->singleton || map == NULL) {
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
     coap_sub_t needle = { .node = node, .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
+    ZCOAP_LOCK(map->lock);
     coap_sub_t **_subscription = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp) : NULL;
     coap_sub_t *subscription = _subscription ? *_subscription : NULL;
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: subscription=%p", __func__, subscription);
@@ -2236,16 +2265,14 @@ coap_subscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const no
         // This token is already in use.  We must de-register from the current
         // URI in case the client is switching this endpoint+token subscription
         // to a new URI.
-        if (subscription->next != NULL) {
-            subscription->next->prev = subscription->prev;
-        }
-        if (subscription->prev != NULL) { // this should always be true
-            subscription->prev->next = subscription->next;
+        if (subscription->pnext != NULL) {
+            *subscription->pnext = subscription->next;
         }
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: overwriting existing subscription with token 0x%"FMT64"X", __func__, subscription->token);
     } else {
         coap_code_t coap_code;
         if ((coap_code = alloc_sub_id(map, req, &needle))) {
+	    ZCOAP_UNLOCK(map->lock);
             return coap_code;
         }
         coap_sub_t **resized_toks = ZCOAP_REALLOC(map->subtokmap, sizeof(map->subtokmap[0]) * (map->n_subscriptions + 1));
@@ -2270,6 +2297,7 @@ coap_subscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const no
                 subscription = NULL;
             }
             free_sub_id(map, &needle);
+	    ZCOAP_UNLOCK(map->lock);
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: subscription allocation failed", __func__);
             return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
@@ -2282,15 +2310,16 @@ coap_subscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const no
         qsort(map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: added subscription=%p for token 0x%"FMT64"X", __func__, subscription, subscription->token);
     }
-    if (node->subs.next) {
-        node->subs.next->prev = subscription;
+    if (node->subs) {
+        node->subs->pnext = &subscription->next;
     }
-    subscription->next = node->subs.next; // O(1) insertion at beginning of subscription list
-    subscription->prev = &node->subs;
-    node->subs.next = subscription;
+    subscription->next = node->subs; // O(1) insertion at beginning of subscription list
+    subscription->pnext = &node->subs;
+    node->subs = subscription;
     subscription->ct = ct;
     req->state.obs = true;
     req->state.seq = node->seq;
+    ZCOAP_UNLOCK(map->lock);
     return 0;
 }
 
@@ -2313,11 +2342,8 @@ free_subscription(coap_sub_map_t *map, coap_sub_t **sub)
 {
     ZCOAP_ASSERT(map != NULL && sub != NULL && *sub != NULL);
     // Remove the subscription from the node.
-    if ((*sub)->next != NULL) {
-        (*sub)->next->prev = (*sub)->prev;
-    }
-    if ((*sub)->prev != NULL) { // this should always be true
-        (*sub)->prev->next = (*sub)->next;
+    if ((*sub)->pnext != NULL) {
+        *(*sub)->pnext = (*sub)->next;
     }
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: freeing subscription=%p, subscriber=%p", __func__, *sub, (*sub)->subscriber);
     // Free the endpoint-specific subsription ID.
@@ -2358,11 +2384,15 @@ free_subscription(coap_sub_map_t *map, coap_sub_t **sub)
  */
 static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (1, 2, 3)))
+__attribute__((nonnull (1, 2)))
 #endif
-coap_unsubscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const node)
+coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
 {
-    ZCOAP_ASSERT(map != NULL && req != NULL && node != NULL);
+    ZCOAP_ASSERT(req != NULL && node != NULL);
+    coap_sub_map_t * const map = coap_sub_map(node);
+    if (map == NULL) {
+        return 0;
+    }
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
@@ -2370,8 +2400,10 @@ coap_unsubscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const 
     coap_sub_t needle = { .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
+    ZCOAP_LOCK(map->lock);
     coap_sub_t **sub = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp) : NULL;
     if (sub == NULL) {
+        ZCOAP_UNLOCK(map->lock);
         return 0; // not found; no-op
     }
     // Yes, publish current observaton sequence number to
@@ -2379,6 +2411,7 @@ coap_unsubscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const 
     req->state.obs = true;
     req->state.obs = node->seq;
     free_subscription(map, sub);
+    ZCOAP_UNLOCK(map->lock);
     return 0;
 }
 
@@ -2393,7 +2426,7 @@ coap_unsubscribe(coap_sub_map_t *map, coap_req_data_t *req, coap_node_t * const 
  * @param parsed options array
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t coap_process_observe_req(coap_sub_map_t *map, coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
+coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
 {
     if (node == NULL || req == NULL || opts == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2406,6 +2439,7 @@ coap_code_t coap_process_observe_req(coap_sub_map_t *map, coap_node_t * const no
     if (observe_opt == NULL) {
         return 0;
     }
+    coap_sub_map_t *map = coap_sub_map(node);
     if (map == NULL) {
         // RFC7651 says we can simply ignore observation requests against URIs
 	// that cannot support them.  In this case, it appears no nodes can
@@ -2420,15 +2454,11 @@ coap_code_t coap_process_observe_req(coap_sub_map_t *map, coap_node_t * const no
     }
     switch (seq) {
         case COAP_OBS_REGISTER: {
-            ZCOAP_LOCK();
-            rc = coap_subscribe(map, req, node, ct);
-            ZCOAP_UNLOCK();
+            rc = coap_subscribe(req, node, ct);
             break;
         }
         case COAP_OBS_DEREGISTER: {
-            ZCOAP_LOCK();
-            rc = coap_unsubscribe(map, req, node);
-            ZCOAP_UNLOCK();
+            rc = coap_unsubscribe(req, node);
             break;
         }
         default:
@@ -2498,10 +2528,8 @@ coap_code_t coap_publish(coap_node_t * const node)
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
     }
     // Mock an incoming request.  Allocate for message plus maximum sized token.
-    #define ZCOAP_PUBLISH_MOCK_REQ_MAXLEN (sizeof(coap_msg_t) + sizeof(node->subs.token))
-    if (ZCOAP_PUBLISH_MOCK_REQ_MAXLEN > ZCOAP_MAX_BUF_SIZE) {
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
+    #define ZCOAP_PUBLISH_MOCK_REQ_MAXLEN (sizeof(coap_msg_t) + sizeof(((coap_sub_t *)NULL)->token))
+    ZCOAP_ASSERT(ZCOAP_PUBLISH_MOCK_REQ_MAXLEN <= ZCOAP_MAX_BUF_SIZE);
     union {
         uint8_t opaque[ZCOAP_PUBLISH_MOCK_REQ_MAXLEN];
         coap_msg_t typed;
@@ -2513,8 +2541,10 @@ coap_code_t coap_publish(coap_node_t * const node)
     coap_req_data_t req_data = { .msg = req, .state = { .obs = true, .seq = node->seq } };
     req->type = COAP_TYPE_NON_CONFIRMABLE;
     req->ver = COAP_VERSION;
-    ZCOAP_LOCK();
-    coap_sub_t *sub = node->subs.next;
+    coap_sub_map_t *map = coap_sub_map(node);
+    ZCOAP_ASSERT(node->observable && node->singleton && map != NULL);
+    ZCOAP_LOCK(map->lock);
+    coap_sub_t *sub = node->subs;
     while (sub) {
         if (window_full(sub->window_left, sub->window_right)) {
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%"FMT64"X (left=0x%04X, right=0x%04X)",
@@ -2533,11 +2563,11 @@ coap_code_t coap_publish(coap_node_t * const node)
         req->msg_ID = sub->msg_ID;
         req->tkl = sub->tkl;
         ZCOAP_MEMCPY(COAP_TOKEN(req), &sub->token, sub->tkl);
-        (*node->GET)(NULL, node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
+        (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
         ++sub->window_right;
         sub = sub->next;
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_UNLOCK(map->lock);
     return rc;
 }
 
@@ -2574,7 +2604,7 @@ coap_publish_one(coap_sub_t *sub, bool instance)
         ++node->seq; // only increment once per node
     }
     // Mock an incoming request.  Allocate for message plus maximum sized token.
-    #define ZCOAP_PUBLISH_MOCK_REQ_MAXLEN (sizeof(coap_msg_t) + sizeof(node->subs.token))
+    #define ZCOAP_PUBLISH_MOCK_REQ_MAXLEN (sizeof(coap_msg_t) + sizeof(((coap_sub_t *)NULL)->token))
     if (ZCOAP_PUBLISH_MOCK_REQ_MAXLEN > ZCOAP_MAX_BUF_SIZE) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
@@ -2595,7 +2625,7 @@ coap_publish_one(coap_sub_t *sub, bool instance)
                                  .len = sizeof(*req) + sub->tkl,
                                  .state = { .obs = true, .seq = node->seq } };
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%"FMT64"X", __func__, sub->msg_ID, sub->token);
-    (*node->GET)(NULL, node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
+    (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
     ++sub->window_right;
     return 0;
 }
@@ -2606,11 +2636,11 @@ coap_publish_one(coap_sub_t *sub, bool instance)
  * @param map subscription map
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t coap_publish_all(coap_sub_map_t* const map)
+coap_code_t coap_publish_all(coap_sub_map_t * const map)
 {
     ZCOAP_ASSERT(map != NULL);
     coap_code_t rc = 0;
-    ZCOAP_LOCK();
+    ZCOAP_LOCK(map->lock);
     static bool instance = false;
     instance = instance ? false : true;
     for (size_t i = 0; i < map->n_subscriptions; ++i) {
@@ -2618,7 +2648,7 @@ coap_code_t coap_publish_all(coap_sub_map_t* const map)
         coap_code_t code = coap_publish_one(sub, instance);
         rc = !rc ? code : rc;
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_UNLOCK(map->lock);
     return rc;
 }
 
@@ -2629,16 +2659,17 @@ coap_code_t coap_publish_all(coap_sub_map_t* const map)
  *
  * Discard request data when done.
  *
- * @param map subscription map
- * @req incoming request to evaluate
+ * @param ack incoming ack request to evaluate
+ * @param root URI tree root node
  */
 static void
 #ifdef __GNUC__
-__attribute__((nonnull (2)))
+__attribute__((nonnull (1, 2)))
 #endif
-coap_handle_ack(coap_sub_map_t * const map, coap_req_data_t * const ack)
+coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
 {
-    ZCOAP_ASSERT(ack != NULL);
+    ZCOAP_ASSERT(ack != NULL && root != NULL);
+    coap_sub_map_t * const map = root->sub_map;
     if (map == NULL || ack->endpoint_cmp == NULL) {
         coap_discard(ack);
         return;
@@ -2646,14 +2677,14 @@ coap_handle_ack(coap_sub_map_t * const map, coap_req_data_t * const ack)
     coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = ack->endpoint_cmp };
     coap_sub_t needle = { .subscriber = &subscriber, .msg_ID = ack->msg->msg_ID };
     coap_sub_t *key = &needle;
-    ZCOAP_LOCK();
+    ZCOAP_LOCK(map->lock);
     coap_sub_t **sub = map->subidmap ? bsearch(&key, map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp) : NULL;
     if (sub != NULL) {
         if (id_in_sub_window(needle.rsp_id, (*sub)->window_left, (*sub)->window_right)) {
             (*sub)->window_left = needle.rsp_id;
         }
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_UNLOCK(map->lock);
     coap_discard(ack);
 }
 
@@ -2662,21 +2693,22 @@ coap_handle_ack(coap_sub_map_t * const map, coap_req_data_t * const ack)
  * observable resources.  If we see a RESET from any endpoints for existing
  * observables, drop the associated subscriptions.
  *
- * @param map subscription map
- * @req incoming request to evaluate
+ * @param reset incoming reset request to evaluate
+ * @param root URI tree root node
  */
 static void
 #ifdef __GNUC__
-__attribute__((nonnull (2)))
+__attribute__((nonnull (1, 2)))
 #endif
-coap_handle_reset(coap_sub_map_t * const map, coap_req_data_t * const reset)
+coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
 {
-    ZCOAP_ASSERT(reset != NULL);
+    ZCOAP_ASSERT(reset != NULL && root != NULL);
+    coap_sub_map_t * const map = root->sub_map;
     if (map == NULL || reset->endpoint_cmp == NULL) {
         coap_discard(reset);
         return;
     }
-    ZCOAP_LOCK();
+    ZCOAP_LOCK(map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2690,7 +2722,7 @@ coap_handle_reset(coap_sub_map_t * const map, coap_req_data_t * const reset)
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: reset received, removing subscription=%p, token 0x%"FMT64"X for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         free_subscription(map, sub);
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_UNLOCK(map->lock);
     coap_discard(reset);
 }
 
@@ -2741,7 +2773,7 @@ coap_notify(coap_sub_t *sub, coap_code_t code)
  */
 void coap_garbage_collect(coap_sub_map_t* const map)
 {
-    ZCOAP_LOCK();
+    ZCOAP_LOCK(map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2756,7 +2788,7 @@ void coap_garbage_collect(coap_sub_map_t* const map)
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_UNLOCK(map->lock);
 }
 
 /**
@@ -2764,9 +2796,9 @@ void coap_garbage_collect(coap_sub_map_t* const map)
  *
  * @param map subscription map
  */
-void coap_cancel_all(coap_sub_map_t* const map)
+void coap_cancel_all(coap_sub_map_t * const map)
 {
-    ZCOAP_LOCK();
+    ZCOAP_LOCK(map->lock);
     const size_t count = map->n_subscriptions;
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
@@ -2775,7 +2807,7 @@ void coap_cancel_all(coap_sub_map_t* const map)
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
-    ZCOAP_UNLOCK();
+    ZCOAP_LOCK(map->lock);
 }
 
 /*********** End RFC7651 observation request utility functions. ************/
@@ -2789,7 +2821,7 @@ void coap_cancel_all(coap_sub_map_t* const map)
  * @param root root node of tree to be used for handling incoming requests
  * @param subs subscription map
  */
-void coap_rx(coap_req_data_t * const req, coap_node_t root, coap_sub_map_t *subs)
+void coap_rx(coap_req_data_t * const req, coap_node_t root)
 {
     ZCOAP_ASSERT(req != NULL);
     // Make sure we have enough bytes for a CoAP message header.
@@ -2816,10 +2848,10 @@ void coap_rx(coap_req_data_t * const req, coap_node_t root, coap_sub_map_t *subs
         case COAP_TYPE_NON_CONFIRMABLE:
             break;
         case COAP_TYPE_ACK:
-           coap_handle_ack(subs, req);
+           coap_handle_ack(req, &root);
            return;
         case COAP_TYPE_RESET:
-           coap_handle_reset(subs, req);
+           coap_handle_reset(req, &root);
            return;
         default:
             // Unrecongized type.
@@ -2840,7 +2872,7 @@ void coap_rx(coap_req_data_t * const req, coap_node_t root, coap_sub_map_t *subs
     ZCOAP_MEMSET(&req->state, 0, sizeof(req->state));
     // This is a valid request!  Inject into the server!
     root.singleton = true; // Project singleton characteristic into children.
-    inject_coap_req(req, &root, subs);
+    inject_coap_req(req, &root);
 }
 
 /**
@@ -2864,12 +2896,13 @@ static coap_code_t iter_coap_sort(coap_node_t * const node, const void *data); /
  * Recursive CoAP URI tree sort iterator.  Also executes init on nodes where
  * init is specified.
  *
- * @param node root node from which to iterate
+ * @param node root node from which to recurse
  * @param data unused
  * @return 0 on success, else an appropriate CoAP error code
  */
 static coap_code_t iter_coap_sort(coap_node_t * const node, const void *data)
 {
+    ZCOAP_ASSERT(node->observable ? node->singleton && coap_sub_map(node) != NULL : true);
     if (node->init) {
         (*node->init)(node);
     }
@@ -2878,7 +2911,7 @@ static coap_code_t iter_coap_sort(coap_node_t * const node, const void *data)
     for (coap_node_t * const *c = node->children; c != NULL && *c != NULL; ++c) {
         coap_node_t child = **c;
         child.parent = node;
-        child.singleton = node->singleton; // singleton is inherited
+        child.singleton = child.singleton ? false : node->singleton; // singleton is inherited
         iter_coap_sort(&child, data);
     }
     if (node->gen) {
@@ -2899,6 +2932,7 @@ static coap_code_t iter_coap_sort(coap_node_t * const node, const void *data)
  */
 void coap_init(coap_node_t root)
 {
+    ZCOAP_ASSERT(!root.observable); // Observation of root node not supported.
     root.singleton = true; // Project singleton characteristic into children.
     iter_coap_sort(&root, NULL);
 }
@@ -5186,7 +5220,7 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         const char *str = (const char *)node->data;
         size_t len = strlen(str);
 
@@ -5204,7 +5238,7 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
         }
 #endif /* __GNUC__ */
         ZCOAP_MEMCPY(buf, str, len + 1);
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_printf(req, "%s", buf);
 #ifndef __GNUC__
         ZCOAP_ALLOCA_FREE(buf);
@@ -5229,9 +5263,9 @@ void coap_get_bool(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         bool val = *(volatile bool *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_bool(req, nopts, opts, val);
     }
 }
@@ -5255,9 +5289,9 @@ void coap_get_u16(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         uint16_t val = *(volatile unsigned *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_u16(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5281,9 +5315,9 @@ void coap_get_u32(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         uint32_t val = *(volatile uint32_t *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_u32(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5307,9 +5341,9 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         uint64_t val = *(volatile uint64_t *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_u64(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5333,9 +5367,9 @@ void coap_get_i16(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         int16_t val = *(volatile int16_t *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_i16(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5359,9 +5393,9 @@ void coap_get_i32(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         uint32_t val = *(volatile uint32_t *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_i32(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5385,9 +5419,9 @@ void coap_get_i64(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         int64_t val = *(volatile int64_t *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_i64(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5411,9 +5445,9 @@ void coap_get_float(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         float val = *(volatile float *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_float(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5438,9 +5472,9 @@ void coap_get_double(ZCOAP_METHOD_SIGNATURE)
     if (!node->data) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         ZCOAP_DOUBLE val = *(volatile ZCOAP_DOUBLE *)node->data;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_return_double(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5473,9 +5507,9 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile bool *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5508,9 +5542,9 @@ void coap_put_u16(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile uint16_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5545,9 +5579,9 @@ void coap_put_u32(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile uint32_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5580,9 +5614,9 @@ void coap_put_u64(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile uint64_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5617,9 +5651,9 @@ void coap_put_i16(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile int16_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5652,9 +5686,9 @@ void coap_put_i32(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile int32_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5687,9 +5721,9 @@ void coap_put_i64(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile int64_t *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5721,9 +5755,9 @@ void coap_put_float(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
-        *(volatile float *)(node->data) = val;
-        ZCOAP_UNLOCK();
+		coap_lock(node);
+		*(volatile float *)(node->data) = val;
+		coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5755,9 +5789,9 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
     } else if (node->data == NULL) {
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        ZCOAP_LOCK();
+        coap_lock(node);
         *(volatile ZCOAP_DOUBLE *)(node->data) = val;
-        ZCOAP_UNLOCK();
+        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
