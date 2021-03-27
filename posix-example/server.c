@@ -47,41 +47,7 @@ static void error(const char *fmt, ...)
 static bool exit_request = false;
 pthread_mutex_t coap_lock = PTHREAD_MUTEX_INITIALIZER; // ZCoAP requires a recursive lock if ZCOAP_LOCK is defined!
 static coap_sub_map_t subs = { .lock = &coap_lock };
-/*
-static int sub_timer_create(const float period)
-{
-    if (period < 0) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: timer period %f is invalid", __func__, (double)period);
-        return -1;
-    }
-    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: creating polling timer with period %f", __func__, (double)period);
-    struct itimerspec itval = {
-        .it_interval.tv_sec = (time_t)period,
-        .it_interval.tv_nsec = (period - (time_t)period) * 1e9,
-        .it_value.tv_sec = (time_t)period,
-        .it_value.tv_nsec = (period - (time_t)period) * 1e9,
-    };
-    errno = 0;
-    int fd = timerfd_create(CLOCK_MONOTONIC, 0);
-    if (fd < 0) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: timerfd_create failed with %d (%s)", __func__, errno, strerror(errno));
-        return fd;
-    }
-    errno = 0;
-    int rv = timerfd_settime(fd, 0, &itval, NULL);
-    if (rv < 0) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: timerfd_settime failed with %d (%s)", __func__, errno, strerror(errno));
-        close(fd);
-        return rv;
-    }
-    return fd;
-}
 
-static void poll_thread_handler(int signal)
-{
-
-}
-*/
 /**
  * Start and execute the observer subscription polling thread.
  *
@@ -90,38 +56,20 @@ static void poll_thread_handler(int signal)
  */
 static void *poll_subscriptions(void *arg)
 {
-/*
     // Create a timer file descriptor for the subscription polling loop.
     float period = *(float *)arg;
-    int timerfd = sub_timer_create(period);
-    if (timerfd < 0) {
-        exit(EXIT_FAILURE);
+    if (period < 0 || period > UINT_MAX) {
+        error("%s: timer period %f is invalid", __func__, (double)period);
     }
-
-    // Install signal handler.
-    struct sigaction sa;
-    sa.sa_handler = &poll_thread_handler;
-    sigfillset(&sa.sa_mask);
-    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        exit(EXIT_FAILURE);
-    }
-
-    // Unblock SIGUSR1.
-    static sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGUSR1);
-    if (pthread_sigmask(SIG_UNBLOCK, &set, NULL) != 0) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: pthread_sigmask failed with %d (%s)", __func__, errno, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    // Loop.
-    errno = 0;
-    int rc;
-    uint64_t missed;
-    */
+    unsigned seconds = period;
+    useconds_t usecs = (period - (unsigned)period) * 1e6;
     while (!exit_request) {
-        sleep(1);//read(timerfd, &missed, sizeof(missed));
+        if (seconds) {
+	    sleep(seconds);
+        }	
+	if (usecs) {
+	    usleep(usecs);
+	}
         coap_publish_all(&subs);
         coap_garbage_collect(&subs);
     }
@@ -129,8 +77,6 @@ static void *poll_subscriptions(void *arg)
     // Notify all subscribers we are going down.
     coap_cancel_all(&subs);
 
-    // Cleanup and return.
-    //close(timerfd);
     return NULL;
 }
 
