@@ -121,7 +121,11 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
         error("socket write error on respond");
     }
 
-    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "Sent %ld bytes back to client at addr 0x%08X, port %04X!\n", sent, cli_addr->sin_addr.s_addr, cli_addr->sin_port);
+    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "Sent %ld bytes back to client at addr %s%s%s:%u!\n", sent,
+              cli_addr->sin_family == AF_INET6 ? "[" : "",
+	      inet_ntoa(cli_addr->sin_addr),
+              cli_addr->sin_family == AF_INET6 ? "]" : "",
+	      cli_addr->sin_port);
 }
 
 /**
