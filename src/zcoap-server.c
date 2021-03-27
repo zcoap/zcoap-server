@@ -2192,6 +2192,12 @@ extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
     return 0;
 }
 
+/**
+ * Return the URI tree root for the passed node.
+ *
+ * @param node node for which to return the tree root
+ * @return URI tree root node
+ */
 static const coap_node_t *coap_get_root(const coap_node_t * const node)
 {
     const coap_node_t *root = node;
@@ -2201,6 +2207,11 @@ static const coap_node_t *coap_get_root(const coap_node_t * const node)
     return root;
 }
 
+/**
+ * Traverse the URI tree upward toward the root to find and acquire a node lock.
+ *
+ * @param node URI tree node from which to traverse upward to locate and acquire a lock
+ */
 static void coap_lock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
@@ -2211,6 +2222,11 @@ static void coap_lock(const coap_node_t *node)
     }
 }
 
+/**
+ * Traverse the URI tree upward toward the root to find and reqlinquish a node lock.
+ *
+ * @param node URI tree node from which to traverse upward to locate and relinquish a lock
+ */
 static void coap_unlock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
@@ -2221,6 +2237,12 @@ static void coap_unlock(const coap_node_t *node)
     }
 }
 
+/**
+ * Locate the observer subscription map from the URI tree root for the passed node.
+ *
+ * @param node URI tree node for which to locate the root node observer subscription map
+ * @return observer subscription map from the URI tree root
+ */
 static coap_sub_map_t *coap_sub_map(const coap_node_t *node)
 {
     return coap_get_root(node)->sub_map;
