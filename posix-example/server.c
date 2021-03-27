@@ -70,7 +70,7 @@ static void *poll_subscriptions(void *arg)
 	    usleep(usecs);
 	}
         coap_publish_all(&subs);
-        //coap_garbage_collect(&subs);
+        coap_garbage_collect(&subs);
     }
 
     // Notify all subscribers we are going down.
@@ -114,10 +114,9 @@ static int spawn_polling_thread(float *period, pthread_t *thread)
  */
 static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
 {
-    ZCOAP_LOG(ZCOAP_LOG_ERR, "%s here", __func__);
     int sockfd = req->context;
     const struct sockaddr_in *cli_addr = req->endpoint;
-    ssize_t sent = sendto(sockfd, rsp, len, MSG_CONFIRM, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
+    ssize_t sent = sendto(sockfd, rsp, len, 0, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
     if (sent < len) {
         error("socket write error on respond");
     }
@@ -356,7 +355,7 @@ int main(int argc, char *argv[])
 
     // Create our public inbound server port.
     errno = 0;
-    servers[PUBLIC_TELEM_SERVER].fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PUBLIC_TELEM_SERVER].fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (servers[PUBLIC_TELEM_SERVER].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -369,7 +368,7 @@ int main(int argc, char *argv[])
 
     // Create our public inbound IPv6 server port.
     errno = 0;
-    servers[PUBLIC_TELEM_SERVERV6].fd = socket(AF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PUBLIC_TELEM_SERVERV6].fd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (servers[PUBLIC_TELEM_SERVERV6].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -382,7 +381,7 @@ int main(int argc, char *argv[])
 
     // Create our local, private inbound server port.
     errno = 0;
-    servers[PRIVATE_SYSFS_SERVER].fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    servers[PRIVATE_SYSFS_SERVER].fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (servers[PRIVATE_SYSFS_SERVER].fd < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "ERROR opening socket - %d (%s)", errno, strerror(errno));
         CLOSE_SOCKS(servers);
@@ -411,7 +410,7 @@ int main(int argc, char *argv[])
 
     // Create a pthread for subscription polling.
     pthread_t polling_thread;
-    float polling_period = 500e-3;
+    float polling_period = 5e-3;
     if (spawn_polling_thread(&polling_period, &polling_thread) < 0) {
         CLOSE_SOCKS(servers);
         exit(EXIT_FAILURE);
