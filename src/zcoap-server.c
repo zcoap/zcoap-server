@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <float.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -25,40 +26,14 @@
 #define COAP_OPTS(_coap_msg) ((uint8_t *)((coap_msg_t *)(_coap_msg) + 1) + (_coap_msg)->tkl)
 #define HREF_KEY "href=/"
 
-#define RESPONSE_FMT_UINT "%u"
-#define RESPONSE_FMT_INT "%d"
-#define RESPONSE_FMT_ULONG "%lu"
-#define RESPONSE_FMT_LONG "%ld"
-#define RESPONSE_FMT_ULLONG "%llu"
-#define RESPONSE_FMT_LLONG "%lld"
+
+#define RESPONSE_FMT_U16 "%u"
+#define RESPONSE_FMT_I16 "%d"
+#define RESPONSE_FMT_U32 "%" PRIu32
+#define RESPONSE_FMT_I32 "%" PRId32
+#define RESPONSE_FMT_U64 "%" PRIu64
+#define RESPONSE_FMT_I64 "%" PRId64
 #define RESPONSE_FMT_FLOAT "%.8g"
-
-#define RESPONSE_FMT_U16 RESPONSE_FMT_UINT
-#define RESPONSE_FMT_I16 RESPONSE_FMT_INT
-
-#if UINT32_MAX == UINT_MAX
-#define FMT32 ""
-#define RESPONSE_FMT_U32 RESPONSE_FMT_UINT
-#define RESPONSE_FMT_I32 RESPONSE_FMT_INT
-#elif UINT32_MAX == ULONG_MAX
-#define FMT32 "l"
-#define RESPONSE_FMT_U32 RESPONSE_FMT_ULONG
-#define RESPONSE_FMT_I32 RESPONSE_FMT_LONG
-#else
-#error cannot determine appropriate format specifiers for 32-bit integers!
-#endif
-
-#if UINT64_MAX == ULLONG_MAX
-#define FMT64 "ll"
-#define RESPONSE_FMT_U64 RESPONSE_FMT_ULLONG
-#define RESPONSE_FMT_I64 RESPONSE_FMT_LLONG
-#elif UINT64_MAX == ULONG_MAX
-#define FMT64 "l"
-#define RESPONSE_FMT_U64 RESPONSE_FMT_ULONG
-#define RESPONSE_FMT_I64 RESPONSE_FMT_LONG
-#else
-#error cannot determine appropriate format specifiers for 64-bit integers!
-#endif
 
 enum {
     CBOR_MAJOR_TYPE_UNSIGNED = 0,
@@ -2290,7 +2265,7 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
         if (subscription->pnext != NULL) {
             *subscription->pnext = subscription->next;
         }
-        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: overwriting existing subscription with token 0x%"FMT64"X", __func__, subscription->token);
+        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: overwriting existing subscription with token 0x%" PRIx64, __func__, subscription->token);
     } else {
         coap_code_t coap_code;
         if ((coap_code = alloc_sub_id(map, req, &needle))) {
@@ -2330,7 +2305,7 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
         ++map->n_subscriptions;
         qsort(map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp);
         qsort(map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp);
-        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: added subscription=%p for token 0x%"FMT64"X", __func__, subscription, subscription->token);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: added subscription=%p for token 0x%" PRIx64, __func__, subscription, subscription->token);
     }
     if (node->nsubs) {
         node->nsubs->pnext = &subscription->next;
@@ -2569,7 +2544,7 @@ coap_code_t coap_publish(coap_node_t * const node)
     coap_sub_t *sub = node->nsubs;
     while (sub) {
         if (window_full(sub->window_left, sub->window_right)) {
-            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%"FMT64"X (left=0x%04X, right=0x%04X)",
+            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%" PRIx64 " (left=0x%04X, right=0x%04X)",
                 __func__, sub->token, sub->window_left, sub->window_right);
             continue; // window wrap
         }
@@ -2577,7 +2552,7 @@ coap_code_t coap_publish(coap_node_t * const node)
             rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
             continue;
         }
-        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%"FMT64"X", __func__, sub->msg_ID, sub->token);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%" PRIx64, __func__, sub->msg_ID, sub->token);
         req_data.endpoint = sub->subscriber->endpoint;
         req_data.responder = sub->subscriber->responder;
         req_data.context = sub->subscriber->context;
@@ -2610,7 +2585,7 @@ coap_publish_one(coap_sub_t *sub, bool instance)
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (window_full(sub->window_left, sub->window_right)) {
-        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%"FMT64"X (left=0x%04X, right=0x%04X)",
+        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%" PRIx64 " (left=0x%04X, right=0x%04X)",
             __func__, sub->token, sub->window_left, sub->window_right);
         return 0;
     }
@@ -2646,7 +2621,7 @@ coap_publish_one(coap_sub_t *sub, bool instance)
                                  .context = sub->subscriber->context,
                                  .len = sizeof(*req) + sub->tkl,
                                  .state = { .obs = true, .seq = node->seq } };
-    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%"FMT64"X", __func__, sub->msg_ID, sub->token);
+    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%" PRIx64, __func__, sub->msg_ID, sub->token);
     (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
     ++sub->window_right;
     return 0;
@@ -2736,12 +2711,12 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
     for (size_t n = 0; n < count; ++n) {
         coap_sub_t **sub = &map->subtokmap[idx];
         ZCOAP_ASSERT(sub != NULL && (*sub)->subscriber != NULL);
-        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%"FMT64"X", __func__, *sub, (*sub)->subscriber, (*sub)->token);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%" PRIx64, __func__, *sub, (*sub)->subscriber, (*sub)->token);
         if (reset->endpoint_cmp(reset->endpoint, (*sub)->subscriber->endpoint)) {
             ++idx;
             continue;
         }
-        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: reset received, removing subscription=%p, token 0x%"FMT64"X for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
+        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: reset received, removing subscription=%p, token 0x%" PRIx64 " for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         free_subscription(map, sub);
     }
     ZCOAP_UNLOCK(&map->lock);
@@ -2762,11 +2737,11 @@ coap_notify(coap_sub_t *sub, coap_code_t code)
 {
     ZCOAP_ASSERT(sub != NULL && sub->tkl <= COAP_MAX_TKL);
     if (window_full(sub->window_left, sub->window_right)) {
-        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%"FMT64"X (left=0x%04X, right=0x%04X); unable to send notification code %u.%02u",
+        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%" PRIx64 " (left=0x%04X, right=0x%04X); unable to send notification code %u.%02u",
             __func__, sub->token, sub->window_left, sub->window_right, COAP_CODE_TO_CLASS(code), code & COAP_CODE_MASK_DETAIL);
         return;
     }
-    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: sending code %u.%02u to subscriber with token 0x%"FMT64"X", __func__, COAP_CODE_TO_CLASS(code), code & COAP_CODE_MASK_DETAIL, sub->token);
+    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: sending code %u.%02u to subscriber with token 0x%" PRIx64, __func__, COAP_CODE_TO_CLASS(code), code & COAP_CODE_MASK_DETAIL, sub->token);
     // Mock an incoming request.  Allocate for message plus maximum sized token.
     union {
         uint8_t opaque[sizeof(coap_msg_t) + COAP_MAX_TKL];
@@ -2801,12 +2776,12 @@ void coap_garbage_collect(coap_sub_map_t* const map)
     for (size_t n = 0; n < count; ++n) {
         coap_sub_t **sub = &map->subtokmap[idx];
         coap_msg_id_t window = sub_window((*sub)->window_left, (*sub)->window_right);
-        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%"FMT64"X with window size %u", __func__, *sub, (*sub)->subscriber, (*sub)->token, window);
+        ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%" PRIx64 " with window size %u", __func__, *sub, (*sub)->subscriber, (*sub)->token, window);
         if (window < ZCOAP_SUB_DROP_THRESH) {
             ++idx;
             continue;
         }
-        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: garbage collecting stale subscription=%p, token 0x%"FMT64"X for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
+        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: garbage collecting stale subscription=%p, token 0x%" PRIx64 "for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
@@ -2825,7 +2800,7 @@ void coap_cancel_all(coap_sub_map_t * const map)
     size_t idx = 0;
     for (size_t n = 0; n < count; ++n) {
         coap_sub_t **sub = &map->subtokmap[idx];
-        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: canceling subscription=%p, token 0x%"FMT64"X for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
+        ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: canceling subscription=%p, token 0x%" PRIx64 " for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
     }
