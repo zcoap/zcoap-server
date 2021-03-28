@@ -2183,36 +2183,6 @@ static const coap_node_t *coap_get_root(const coap_node_t * const node)
 }
 
 /**
- * Traverse the URI tree upward toward the root to find and acquire a node lock.
- *
- * @param node URI tree node from which to traverse upward to locate and acquire a lock
- */
-static void coap_lock(const coap_node_t *node)
-{
-    while (!node->lock && node->parent) {
-        node = node->parent;
-    }
-    if (node->lock) {
-        ZCOAP_LOCK(node->lock);
-    }
-}
-
-/**
- * Traverse the URI tree upward toward the root to find and reqlinquish a node lock.
- *
- * @param node URI tree node from which to traverse upward to locate and relinquish a lock
- */
-static void coap_unlock(const coap_node_t *node)
-{
-    while (!node->lock && node->parent) {
-        node = node->parent;
-    }
-    if (node->lock) {
-        ZCOAP_UNLOCK(node->lock);
-    }
-}
-
-/**
  * Locate the observer subscription map from the URI tree root for the passed node.
  *
  * @param node URI tree node for which to locate the root node observer subscription map
@@ -5197,6 +5167,36 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
         default:
             coap_status_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_NO_ACCEPT));
             break;
+    }
+}
+
+/**
+ * Traverse the URI tree upward toward the root to find and acquire a node lock.
+ *
+ * @param node URI tree node from which to traverse upward to locate and acquire a lock
+ */
+static void coap_lock(const coap_node_t *node)
+{
+    while (!node->lock && node->parent) {
+        node = node->parent;
+    }
+    if (node->lock) {
+        ZCOAP_LOCK(node->lock);
+    }
+}
+
+/**
+ * Traverse the URI tree upward toward the root to find and reqlinquish a node lock.
+ *
+ * @param node URI tree node from which to traverse upward to locate and relinquish a lock
+ */
+static void coap_unlock(const coap_node_t *node)
+{
+    while (!node->lock && node->parent) {
+        node = node->parent;
+    }
+    if (node->lock) {
+        ZCOAP_UNLOCK(node->lock);
     }
 }
 
