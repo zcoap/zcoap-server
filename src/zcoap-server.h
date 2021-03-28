@@ -156,23 +156,8 @@ typedef enum coap_content_format_e {
 } coap_content_format_t;
 
 typedef uint16_t coap_ct_t;
-typedef union ct_mask_s {
-    struct {
-        uint32_t ct_text : 1;
-        uint32_t ct_link : 1;
-        uint32_t ct_xml : 1;
-        uint32_t ct_ostream : 1;
-        uint32_t ct_exi : 1;
-        uint32_t ct_json : 1;
-        uint32_t ct_cbor : 1;
-        uint32_t rsv : 9;
-        uint32_t literal_set : 1;
-    };
-    coap_ct_t ct_literal;
-} ct_mask_t;
-
-extern void set_ct_mask(ct_mask_t * const mask, ...);
-extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
+extern void count_ct(size_t *count, ...);
+extern void extract_ct(coap_ct_t *ct, ...);
 
 /**
  * ZCOAP_METHOD_SIGNATURE
@@ -181,7 +166,7 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, ct_mask_t * const ctmask
+#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, size_t * const ctcnt, coap_ct_t * const cts
 
 /**
  * ZCOAP_METHOD_HEADER
@@ -193,7 +178,15 @@ extern void set_ct_mask_literal(ct_mask_t * const mask, coap_ct_t ct);
  *
  * @param ... zero or more COAP_FMT indicators, terminated with ZCOAP_FMT_SENTINEL
  */
-#define ZCOAP_METHOD_HEADER(...) if (ctmask) { set_ct_mask(ctmask, __VA_ARGS__); return; } \
+#define ZCOAP_METHOD_HEADER(...) \
+    if (ctcnt) { \
+        count_ct(ctcnt, __VA_ARGS__); \
+        return; \
+    } \
+    if (ct) { \
+        extract_ct(cts, __VA_ARGS__); \
+        return; \
+    } \
     if (coap_process_observe_req(node, req, nopts, opts, ct)) { \
         return; \
     } \
@@ -675,4 +668,4 @@ extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry 
 
 extern coap_node_t wellknown_uri;
 
-#endif	/* ZCOAP_SERVER_H */
+#endif /* ZCOAP_SERVER_H */

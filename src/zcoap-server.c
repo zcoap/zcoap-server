@@ -328,13 +328,15 @@ href_match(const char* name, const href_filter_t* href_filter)
     return false;
 }
 
-// Copy of coap_handler_t signature, but with differing const and nonnull rules.
+// Copies of coap_handler_t signature, but with differing nonnull rules.
 // This allows passage of different parameters when we wish to access handlers'
 // alternate function: extraction of node content type.
 #ifdef __GNUC__
-typedef void __attribute__((nonnull (1, 8))) (*ct_extractor)(const ZCOAP_METHOD_SIGNATURE);
+typedef void __attribute__((nonnull (1, 8))) (*ct_counter)(ZCOAP_METHOD_SIGNATURE);
+typedef void __attribute__((nonnull (1, 9))) (*ct_extractor)(ZCOAP_METHOD_SIGNATURE);
 #else
-typedef void (*ct_extractor)(const ZCOAP_METHOD_SIGNATURE);
+typedef void (*ct_counter)(ZCOAP_METHOD_SIGNATURE);
+typedef void (*ct_extractor)(ZCOAP_METHOD_SIGNATURE);
 #endif
 
  /**
@@ -366,6 +368,27 @@ static void SNPRINTF(size_t *total, char ** const buf, size_t *remain, const cha
 }
 
 /**
+ * Compare two content format designators.
+ * sorted.
+ *
+ * @param a content format designator
+ * @param b content format designator
+ * @return 1 if a>b, 0 if a==b, -1 if a<b
+ */
+static int ct_cmp(const void * const a, const void * const b)
+{
+    const coap_ct_t *cta = (const coap_ct_t *)a;
+    const coap_ct_t *ctb = (const coap_ct_t *)b;
+    if (*cta < *ctb) {
+        return -1;
+    } else if (*cta > *ctb) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+/**
  * Invoke a node's methods in 'ct_extractor' mode, passing a ct_mask for each
  * method to set supported content-type flags as approprate. Once the flags
  * are extracted, print corresponding content-type designators to the output
@@ -383,63 +406,49 @@ static void SNPRINTF(size_t *total, char ** const buf, size_t *remain, const cha
  */
 static void print_ct(coap_node_t * const node, size_t * const len, char ** const buf, size_t * const remain)
 {
-    ct_mask_t mask = {{ 0 }};
+    // Count content format designators.
+    size_t count = 0;
     if (node->GET) {
-        (*(ct_extractor)node->GET)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
-        if (mask.literal_set) {
-            // Alternate literal encoding; mask is not a mask at all, but contains
-            // a single content type literal in the lower byte.
-            SNPRINTF(len, buf, remain, ";ct=%u", mask.ct_literal);
-            ZCOAP_MEMSET(&mask, 0, sizeof(mask));
-        }
+        (*(ct_counter)node->GET)(node, NULL, 0, NULL, 0, 0, NULL, &count, NULL);
     }
     if (node->PUT) {
-        (*(ct_extractor)node->PUT)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
-        if (mask.literal_set) {
-            // Alternate literal encoding; mask is not a mask at all, but contains
-            // a single content type literal in the lower byte.
-            SNPRINTF(len, buf, remain, ";ct=%u", mask.ct_literal);
-            ZCOAP_MEMSET(&mask, 0, sizeof(mask));
-        }
+        (*(ct_counter)node->PUT)(node, NULL, 0, NULL, 0, 0, NULL, &count, NULL);
     }
     if (node->POST) {
-        (*(ct_extractor)node->POST)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
-        if (mask.literal_set) {
-            // Alternate literal encoding; mask is not a mask at all, but contains
-            // a single content type literal in the lower byte.
-            SNPRINTF(len, buf, remain, ";ct=%u", mask.ct_literal);
-            ZCOAP_MEMSET(&mask, 0, sizeof(mask));
-        }
+        (*(ct_counter)node->POST)(node, NULL, 0, NULL, 0, 0, NULL, &count, NULL);
     }
     if (node->DEL) {
-        (*(ct_extractor)node->DEL)(node, NULL, 0, NULL, 0, 0, NULL, &mask);
-        if (mask.literal_set) {
-            // Alternate literal encoding; mask is not a mask at all, but contains
-            // a single content type literal in the lower byte.
-            SNPRINTF(len, buf, remain, ";ct=%u", mask.ct_literal);
-            ZCOAP_MEMSET(&mask, 0, sizeof(mask));
+        (*(ct_counter)node->DEL)(node, NULL, 0, NULL, 0, 0, NULL, &count, NULL);
+    }
+
+    // Extract content format designators.
+    ZCOAP_ASSERT(count < ZCOAP_MAX_NODE_CONTENT_FMT);
+#ifdef __GNUC__
+    coap_ct_t ct[count];
+#else
+    coap_ct_t ct[ZCOAP_NODE_MAX_CONTENT_FMT];
+#endif
+    if (node->GET) {
+        (*(ct_extractor)node->GET)(node, NULL, 0, NULL, 0, 0, NULL, NULL, ct);
+    }
+    if (node->PUT) {
+        (*(ct_extractor)node->PUT)(node, NULL, 0, NULL, 0, 0, NULL, NULL, ct);
+    }
+    if (node->POST) {
+        (*(ct_extractor)node->POST)(node, NULL, 0, NULL, 0, 0, NULL, NULL, ct);
+    }
+    if (node->DEL) {
+        (*(ct_extractor)node->DEL)(node, NULL, 0, NULL, 0, 0, NULL, NULL, ct);
+    }
+
+    // Sort and print, suppressing duplicates.
+    qsort(ct, count, sizeof(ct[0]), &ct_cmp);
+    coap_ct_t prev = ZCOAP_FMT_SENTINEL;
+    for (size_t i = 0; i < count; ++i) {
+        if (ct[i] != prev) {
+            SNPRINTF(len, buf, remain, ";ct=%u", ct[i]);
+            prev = ct[i];
         }
-    }
-    if (mask.ct_text) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_TEXT);
-    }
-    if (mask.ct_link) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_LINK);
-    }
-    if (mask.ct_xml) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_XML);
-    }
-    if (mask.ct_ostream) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_STREAM);
-    }
-    if (mask.ct_exi) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_EXI);
-    }
-    if (mask.ct_json) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_JSON);
-    }
-    if (mask.ct_cbor) {
-        SNPRINTF(len, buf, remain, ";ct=%u", COAP_FMT_CBOR);
     }
 }
 
@@ -1569,7 +1578,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->GET) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing GET for path '%s'", __func__, node->name);
-                        (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: GET method unsupported for path '%s'", __func__, node->name);
@@ -1579,7 +1588,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->PUT) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing PUT for path '%s'", __func__, node->name);
-                        (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: PUT method unsupported for path '%s'", __func__, node->name);
@@ -1589,7 +1598,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->POST) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing POST for path '%s'", __func__, node->name);
-                        (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: POST method unsupported for path '%s'", __func__, node->name);
@@ -1599,7 +1608,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->DEL) {
                         EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing DEL for path '%s'", __func__, node->name);
-                        (*node->DEL)(node, req, nopts, opts, ct, len, payload, NULL);
+                        (*node->DEL)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: DEL method unsupported for path '%s'", __func__, node->name);
@@ -2530,7 +2539,7 @@ coap_code_t coap_publish(coap_node_t * const node)
         req->msg_ID = sub->msg_ID;
         req->tkl = sub->tkl;
         ZCOAP_MEMCPY(COAP_TOKEN(req), &sub->token, sub->tkl);
-        (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
+        (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL, NULL);
         ++sub->window_right;
         sub = sub->next;
     }
@@ -2592,7 +2601,7 @@ coap_publish_one(coap_sub_t *sub, bool instance)
                                  .len = sizeof(*req) + sub->tkl,
                                  .state = { .obs = true, .seq = node->seq } };
     ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%" PRIx64, __func__, sub->msg_ID, sub->token);
-    (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL);
+    (*node->GET)(node, &req_data, 0, NULL, sub->ct, 0, NULL, NULL, NULL);
     ++sub->window_right;
     return 0;
 }
@@ -5794,59 +5803,38 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
 }
 
 /**
- * Set content type bits in mask for the passed vector of content type designators.
+ * Count elements within the passed vector of content type designators.
  *
- * @param mask (out) mask to set with bits for passed designators
+ * @param count (out) count of passed designators
  * @param ... one or more content type designators
  */
-void set_ct_mask(ct_mask_t *mask, ...)
+void count_ct(size_t * const count, ...)
 {
+    ZCOAP_ASSERT(count != NULL);
     va_list ap;
-    va_start(ap, mask);
+    va_start(ap, count);
     unsigned ct; // va_list element sizes will be platform-dependent; unsigned gets us the correct width
     while ((ct = va_arg(ap, unsigned)) != ZCOAP_FMT_SENTINEL) {
-        switch (ct) {
-            case COAP_FMT_TEXT:
-                mask->ct_text = 1;
-                break;
-            case COAP_FMT_LINK:
-                mask->ct_link = 1;
-                break;
-            case COAP_FMT_XML:
-                mask->ct_xml = 1;
-                break;
-            case COAP_FMT_STREAM:
-                mask->ct_ostream = 1;
-                break;
-            case COAP_FMT_EXI:
-                mask->ct_exi = 1;
-                break;
-            case COAP_FMT_JSON:
-                mask->ct_json = 1;
-                break;
-            case COAP_FMT_CBOR:
-                mask->ct_cbor = 1;
-                break;
-        }
+        ++*count;
     }
     va_end(ap);
 }
 
 /**
- * Set mask with the single passed content type literal.  Content type need not
- * be known to us, but must be strictly less than 0xFF, which is a special code
- * for us.  Note also that we've committed for all time to NOT supporting
- * content type designators larger than a byte in size.
+ * Extract elements from the passed vector of content type designators.
  *
- * @param mask content type mask to set with the literal value
- * @param ct content type literal
+ * @param cts (out) output write location for content type designators
+ * @param ... one or more content type designators
  */
-void set_ct_mask_literal(ct_mask_t *mask, coap_ct_t ct)
+void extract_ct(coap_ct_t *cts, ...)
 {
-    if (ct >= ZCOAP_FMT_SENTINEL) {
-        return;
+    coap_ct_t *cur = cts;
+    va_list ap;
+    va_start(ap, cts);
+    unsigned ct; // va_list element sizes will be platform-dependent; unsigned gets us the correct width
+    while ((ct = va_arg(ap, unsigned)) != ZCOAP_FMT_SENTINEL) {
+        *cts = ct;
+        ++cts;
     }
-    memset(mask, 0, sizeof(*mask));
-    mask->ct_literal = ct;
-    mask->literal_set = 1;
+    va_end(ap);
 }
