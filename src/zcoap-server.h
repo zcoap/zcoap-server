@@ -411,7 +411,7 @@ struct coap_req_data_s {
      * if the incoming message is not a request.
      *
      * An implicit contract exists with call to this function: the server will
-     * only call this function once and will not access *header or *msg after
+     * only call this function once and will not access *endpoint or *msg after
      * this function is called.
      *
      * If the implementation requires no explicit action for 'discard', this
@@ -496,7 +496,7 @@ typedef coap_code_t (*coap_recurse_t)(coap_node_t * const node, const void* data
  * Dynamic URI generator interface.  Based on the passed parent context,
  * the generator should populate 0 or more children.  Children must be allocated
  * with the caller-passed allocator.  The caller then becomes responsible for
- * freeing children with a symetric free function.
+ * freeing children with a symmetric free function.
  *
  * @param parent node under which to dynamically generate child nodes
  * @param recursor recursive callback to which dynamically-created children should be passed
@@ -670,7 +670,7 @@ extern void coap_put_double(ZCOAP_METHOD_SIGNATURE);
 #error no support for INT_MAX
 #endif
 
-extern void coap_init(coap_node_t root); // <- init must be called against any URI trees before it is passed to the server!
+extern void coap_init(coap_node_t root); // <- init must be called against any URI tree before it is passed to the server!
 extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry point!
 
 extern coap_node_t wellknown_uri;
