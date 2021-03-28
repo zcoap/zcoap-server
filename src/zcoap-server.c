@@ -968,6 +968,8 @@ build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
     opt->val = (uint8_t *)seq + (sizeof(*seq) - opt->len);
 }
 
+static void _coap_cancel(coap_node_t * const node, coap_code_t code); // forward declaration
+
 /**
  * If a modify request (PUT, POST or DELETE) has succeeded, notify susbscribers.
  */
@@ -987,7 +989,7 @@ static void coap_auto_publish(coap_req_data_t * const req, const coap_msg_t * co
         case COAP_REQ_METHOD_DEL:
             if (rsp->code.code_class == COAP_SUCCESS) {
                 coap_publish(req->state.node);
-                coap_cancel(req->state.node);
+                _coap_cancel(req->state.node, 0);
             }
             break;
         default:
@@ -2794,8 +2796,9 @@ void coap_garbage_collect(coap_sub_map_t* const map)
  * Cancel all subscriptions for the passed node.
  *
  * @param node node for which to cancel subscriptions
+ * @param CoAP response code to send to subscribers, or 0 to skip subscriber notification
  */
-void coap_cancel(coap_node_t * const node)
+static void _coap_cancel(coap_node_t * const node, coap_code_t code)
 {
     ZCOAP_ASSERT(node != NULL);
     if (!node->observable) {
@@ -2804,10 +2807,24 @@ void coap_cancel(coap_node_t * const node)
     coap_sub_map_t *map = coap_sub_map(node);
     ZCOAP_ASSERT(map != NULL);
     ZCOAP_LOCK(&map->lock);
-    while (node->nsubs) {
-        free_subscription(map, &node->nsubs);
+    coap_sub_t *sub;
+    while ((sub = node->nsubs)) {
+        if (code) {
+            coap_notify(sub, code);
+        }
+        free_subscription(map, &sub);
     }
     ZCOAP_UNLOCK(&map->lock);
+}
+
+/**
+ * Cancel all subscriptions for the passed node.
+ *
+ * @param node node for which to cancel subscriptions
+ */
+void coap_cancel(coap_node_t * const node)
+{
+    _coap_cancel(node, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
 }
 
 /**
