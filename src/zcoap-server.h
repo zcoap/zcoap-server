@@ -576,7 +576,7 @@ extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, con
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
 extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
-extern coap_code_t coap_publish(coap_node_t *node);
+extern coap_code_t coap_publish(coap_node_t *node); // publish an update to observers of the passed node
 extern coap_code_t coap_publish_all(coap_sub_map_t *map); // publish an update to all observers
 extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
 extern void coap_cancel_all(coap_sub_map_t *map); // cancel all observer subscriptions
