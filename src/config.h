@@ -70,16 +70,6 @@
 #define ZCOAP_MAX_PAYLOAD_OPTS 32
 #endif /* ZCOAP_MAX_PAYLOD_OPTS */
 
-#ifndef ZCOAP_MAX_NODE_CONTENT_FMT
-/**
- * ZCOAP_MAX_NODE_CONTENT_FMT
- *
- * This defines the limit for the number of content format designators a
- * node can advertise in .well-known/core.
- */
-#define ZCOAP_MAX_NODE_CONTENT_FMT 8
-#endif /* ZCOAP_MAX_NODE_CONTENT_FMT */
-
 #ifndef ZCOAP_MALLOC
 /**
  * ZCOAP_MALLOC and family

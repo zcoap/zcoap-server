@@ -422,11 +422,11 @@ static void print_ct(coap_node_t * const node, size_t * const len, char ** const
     }
 
     // Extract content format designators.
-    ZCOAP_ASSERT(count < ZCOAP_MAX_NODE_CONTENT_FMT);
+    ZCOAP_ASSERT(count  * sizeof(coap_ct_t) < ZCOAP_MAX_BUF_SIZE);
 #ifdef __GNUC__
     coap_ct_t ct[count];
 #else
-    coap_ct_t ct[ZCOAP_NODE_MAX_CONTENT_FMT];
+    coap_ct_t ct[ZCOAP_MAX_BUF_SIZE / sizeof(coap_ct_t)];
 #endif
     if (node->GET) {
         (*(ct_extractor)node->GET)(node, NULL, 0, NULL, 0, 0, NULL, NULL, ct);
