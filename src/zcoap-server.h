@@ -575,8 +575,9 @@ extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const voi
 extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
 extern void coap_publish(coap_node_t *node); // publish an update to observers of the passed node
 extern void coap_publish_all(coap_sub_map_t *map); // publish an update to all observers
-extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
+extern void coap_cancel(coap_node_t *node); // cancel all subscriptions for the passed node
 extern void coap_cancel_all(coap_sub_map_t *map); // cancel all observer subscriptions
+extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);

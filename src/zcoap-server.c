@@ -980,13 +980,18 @@ static void coap_auto_publish(coap_req_data_t * const req, const coap_msg_t * co
     switch (req->msg->code.code_detail) {
         case COAP_REQ_METHOD_PUT:
         case COAP_REQ_METHOD_POST:
-        case COAP_REQ_METHOD_DEL:
-	    if (rsp->code.code_class == COAP_SUCCESS) {
+            if (rsp->code.code_class == COAP_SUCCESS) {
                 coap_publish(req->state.node);
-	    }
-	    break;
+            }
+            break;
+        case COAP_REQ_METHOD_DEL:
+            if (rsp->code.code_class == COAP_SUCCESS) {
+                coap_publish(req->state.node);
+                coap_cancel(req->state.node);
+            }
+            break;
         default:
-	    break;
+            break;
     }
 }
 
@@ -2558,7 +2563,7 @@ void coap_publish(coap_node_t * const node)
                 __func__, sub->token, sub->window_left, sub->window_right);
             continue; // window wrap
         }
-	ZCOAP_ASSERT(sub->subscriber != NULL);
+        ZCOAP_ASSERT(sub->subscriber != NULL);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: publishing ID 0x%04X for subscription with token 0x%" PRIx64, __func__, sub->msg_ID, sub->token);
         req_data.endpoint = sub->subscriber->endpoint;
         req_data.responder = sub->subscriber->responder;
@@ -2781,6 +2786,26 @@ void coap_garbage_collect(coap_sub_map_t* const map)
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: garbage collecting stale subscription=%p, token 0x%" PRIx64 "for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
+    }
+    ZCOAP_UNLOCK(&map->lock);
+}
+
+/**
+ * Cancel all subscriptions for the passed node.
+ *
+ * @param node node for which to cancel subscriptions
+ */
+void coap_cancel(coap_node_t * const node)
+{
+    ZCOAP_ASSERT(node != NULL);
+    if (!node->observable) {
+        return;
+    }
+    coap_sub_map_t *map = coap_sub_map(node);
+    ZCOAP_ASSERT(map != NULL);
+    ZCOAP_LOCK(&map->lock);
+    while (node->nsubs) {
+        free_subscription(map, &node->nsubs);
     }
     ZCOAP_UNLOCK(&map->lock);
 }
