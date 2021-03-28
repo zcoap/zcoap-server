@@ -2064,6 +2064,10 @@ alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t
     coap_subscriber_t **_subscriber = map->subscribers ? bsearch(&key, map->subscribers, map->n_subscribers, sizeof(map->subscribers[0]), &sub_map_cmp) : NULL;
     coap_subscriber_t *subscriber = _subscriber ? *_subscriber : NULL;
     if (subscriber == NULL) {
+        if (map->n_subscribers >= ZCOAP_MAX_SUBSCRIBERS) {
+            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: subscriber table full", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
         coap_subscriber_t **resized = ZCOAP_REALLOC(map->subscribers, sizeof(map->subscribers[0]) * (map->n_subscribers + 1));
         if (resized == NULL) {
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: subscriber table reallocation failed", __func__);
@@ -2246,6 +2250,11 @@ coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
         }
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: overwriting existing subscription with token 0x%" PRIx64, __func__, subscription->token);
     } else {
+        if (map->n_subscriptions >= ZCOAP_MAX_SUBSCRIPTIONS) {
+            ZCOAP_UNLOCK(&map->lock);
+            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: subscription table full", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
         coap_code_t coap_code;
         if ((coap_code = alloc_sub_id(map, req, &needle))) {
             ZCOAP_UNLOCK(&map->lock);
@@ -2756,6 +2765,7 @@ void coap_garbage_collect(coap_sub_map_t* const map)
         coap_sub_t **sub = &map->subtokmap[idx];
         coap_msg_id_t window = sub_window((*sub)->window_left, (*sub)->window_right);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%" PRIx64 " with window size %u", __func__, *sub, (*sub)->subscriber, (*sub)->token, window);
+        ZCOAP_ASSERT(ZCOAP_SUB_DROP_THRESH < ((1 << ZCOAP_SUB_NSTART_BITS) - 1));
         if (window < ZCOAP_SUB_DROP_THRESH) {
             ++idx;
             continue;

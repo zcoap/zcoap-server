@@ -43,7 +43,8 @@
 /**
  * ZCOAP_MAX_BUF_SIZE
  *
- * Maximum buffer size for incoming ASCII payloads and path segments.
+ * Maximum buffer size for incoming ASCII-encoded primititives, path
+ * segments, and other things we may frequently allocate on the stack.
 
  * Note, this doesn't affect the allowed size of the response buffer.
  * For example, if the response is a long byte array as you might see
@@ -217,6 +218,22 @@
 #endif
 
 #endif /* ZCOAP_DOUBLE */
+
+#ifndef ZCOAP_MAX_SUBSCRIBERS
+/**
+ * We must limit total number of subscriber endpoints to keep subscription
+ * map memory footprint reasonable.
+ */
+#define ZCOAP_MAX_SUBSCRIBERS 32
+#endif /* ZCOAP_MAX_SUBSCRIBERS */
+
+#ifndef ZCOAP_MAX_SUBSCRIPTIONS
+/**
+ * We must limit total number of subscriber endpoints to keep subscription
+ * map memory footprint reasonable.
+ */
+#define ZCOAP_MAX_SUBSCRIPTIONS 64
+#endif /* ZCOAP_MAX_SUBSCRIPTIONS */
 
 #ifndef ZCOAP_SUB_ID_BITS
 /**
