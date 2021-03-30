@@ -15,6 +15,11 @@
 #include <stddef.h>
 #include "config.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef enum coap_type_e {
     COAP_TYPE_CONFIRMABLE = 0,
     COAP_TYPE_NON_CONFIRMABLE = 1,
@@ -565,6 +570,7 @@ extern coap_code_t __attribute__((nonnull (1, 2, 4))) coap_process_observe_req(c
 extern coap_code_t __attribute__((nonnull (1))) coap_publish(coap_node_t * const node);
 extern coap_code_t coap_publish_all(void);
 
+extern void __attribute__((nonnull (1))) coap_ack(coap_req_data_t *req);
 extern void __attribute__((nonnull (1))) coap_rsp(coap_req_data_t *req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_content_rsp(coap_req_data_t *req, coap_code_t code, coap_ct_t ct, size_t pl_len, const void *payload);
 extern void __attribute__((nonnull (1))) coap_status_rsp(coap_req_data_t *req, coap_code_t code);
@@ -685,5 +691,9 @@ extern void __attribute__((nonnull (1))) coap_rx(coap_req_data_t *req, coap_node
 extern void coap_rx(coap_req_data_t* req, coap_node_t root); // <- server entry point!
 #endif
 extern coap_node_t wellknown_uri;
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif	/* ZCOAP_SERVER_H */

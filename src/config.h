@@ -30,6 +30,7 @@
 #define ZCOAP_VLOG(_level, _fmt, _ap){}
 #endif /*ZCOAP_LOG */
 
+
 #ifndef ZCOAP_ASSERT
 /**
  * Implementation may define a custom assert macro.

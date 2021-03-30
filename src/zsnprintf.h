@@ -16,11 +16,20 @@
 
 #include <stdarg.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 size_t zvsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
 #ifdef __GNUC__
 size_t zsnprintf(char *buf, size_t n, const char *fmt, ...) __attribute__((format (printf, 3, 4)));
 #else
 size_t zsnprintf(char* buf, size_t n, const char* fmt, ...);
+#endif
+
+#ifdef __cplusplus
+} // extern "C"
 #endif
 
 #endif	/* ZSNPRINTF_H */

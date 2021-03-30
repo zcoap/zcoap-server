@@ -1062,17 +1062,17 @@ coap_rsp(coap_req_data_t * const req, coap_code_t code, size_t nopts, const coap
     }
     // Allocate our response PDU.  Keep it on the stack if we can.
     coap_msg_t *rsp;
-#ifdef __GNUC__
-    union {
-        uint8_t opaque[alen <= ZCOAP_MAX_BUF_SIZE ? alen : 0];
-        coap_msg_t typed;
-    } sbuf;
-#else
+//#ifdef __GNUC__
+//    union {
+//        uint8_t opaque[alen <= ZCOAP_MAX_BUF_SIZE ? alen : 0];
+//        coap_msg_t typed;
+//    } sbuf;
+//#else
     union {
         uint8_t opaque[ZCOAP_MAX_BUF_SIZE];
         coap_msg_t typed;
     } sbuf;
-#endif
+//#endif
     if (alen <= ZCOAP_MAX_BUF_SIZE) {
         rsp = &sbuf.typed;
     } else if ((rsp = ZCOAP_ALLOCA(alen)) == NULL) {
