@@ -183,7 +183,7 @@ extern void extract_ct(coap_ct_t *ct, ...);
         count_ct(ctcnt, __VA_ARGS__); \
         return; \
     } \
-    if (ct) { \
+    if (cts) { \
         extract_ct(cts, __VA_ARGS__); \
         return; \
     } \
