@@ -969,6 +969,7 @@ build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
 }
 
 static void _coap_cancel(coap_node_t * const node, coap_code_t code); // forward declaration
+static coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
 
 /**
  * If a modify request (PUT, POST) has succeeded, notify susbscribers.
