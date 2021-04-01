@@ -359,7 +359,10 @@ struct coap_req_data_s {
      * implementation, this will typically be a socket file descriptor that
      * may be written for ACK and response.
      */
-    int context;
+    union {
+        void* context_ptr;
+        int context;
+    };
 
     /**
      * endpoint
