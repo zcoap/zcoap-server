@@ -2247,11 +2247,7 @@ static coap_sub_map_t *coap_sub_map(const coap_node_t *node)
  * @param node (in/out) node to which to add a subscription
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2)))
-#endif
-coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
+static coap_code_t coap_subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
 {
     if (req != NULL && node != NULL && node->GET != NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2400,11 +2396,7 @@ free_subscription(coap_sub_map_t *map, coap_sub_t **sub)
  * @param node (in/out) node for which to drop subscription
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2)))
-#endif
-coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
+static coap_code_t coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
 {
     if (req == NULL || node == NULL) {
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
@@ -2426,10 +2418,8 @@ coap_unsubscribe(coap_req_data_t *req, coap_node_t * const node)
         ZCOAP_UNLOCK(&map->lock);
         return 0; // not found; no-op
     }
-    // Yes, publish current observaton sequence number to
-    // the requesting agent.
-    req->state.obs = true;
-    req->state.obs = node->seq;
+    // Per RFC7641, do *not* enclose observe option on deregister (unsubscribe).
+    // Hence, we do not set req->state.obs true.
     free_subscription(map, sub);
     ZCOAP_UNLOCK(&map->lock);
     return 0;
