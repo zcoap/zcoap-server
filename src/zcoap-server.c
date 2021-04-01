@@ -1217,6 +1217,7 @@ extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
 {
     ZCOAP_ASSERT(opt != NULL && seq != NULL);
     if (opt->num != COAP_OPT_OBSERVE) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: not an observe option", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (opt->len > 3) {
@@ -1252,7 +1253,8 @@ static coap_sub_map_t *get_sub_map(const coap_node_t *node)
  */
 static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coap_ct_t ct)
 {
-    if (req != NULL && node != NULL && node->GET != NULL) {
+    if (req == NULL || node == NULL || node->GET == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (!node->observable) {
@@ -1260,6 +1262,7 @@ static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coa
     }
     coap_sub_map_t * const map = get_sub_map(node);
     if (!node->singleton || map == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: non-singleton node, or map is NULL", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (req->msg->tkl > COAP_MAX_TKL) {
@@ -1399,6 +1402,7 @@ free_subscription(coap_sub_map_t *map, coap_sub_t **sub)
 static coap_code_t unsubscribe(coap_req_data_t *req, coap_node_t * const node)
 {
     if (req == NULL || node == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     coap_sub_map_t * const map = get_sub_map(node);
