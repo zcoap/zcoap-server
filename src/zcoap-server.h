@@ -187,9 +187,6 @@ extern void extract_ct(coap_ct_t *ct, ...);
         extract_ct(cts, __VA_ARGS__); \
         return; \
     } \
-    if (coap_process_observe_req(node, req, nopts, opts, ct)) { \
-        return; \
-    } \
 
 typedef uint16_t coap_msg_id_t;
 #define COAP_BITS_TKL 4
@@ -572,7 +569,6 @@ extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
-extern coap_code_t coap_process_observe_req(coap_node_t *node, coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct);
 extern void coap_publish(coap_node_t *node); // publish an update to observers of the passed node
 extern void coap_publish_all(coap_sub_map_t *map); // publish an update to all observers
 extern void coap_cancel(coap_node_t *node); // cancel all subscriptions for the passed node

@@ -971,7 +971,7 @@ build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
 static void _coap_cancel(coap_node_t * const node, coap_code_t code); // forward declaration
 
 /**
- * If a modify request (PUT, POST or DELETE) has succeeded, notify susbscribers.
+ * If a modify request (PUT, POST) has succeeded, notify susbscribers.
  */
 static void coap_auto_publish(coap_req_data_t * const req, const coap_msg_t * const rsp)
 {
@@ -984,12 +984,6 @@ static void coap_auto_publish(coap_req_data_t * const req, const coap_msg_t * co
         case COAP_REQ_METHOD_POST:
             if (rsp->code.code_class == COAP_SUCCESS) {
                 coap_publish(req->state.node);
-            }
-            break;
-        case COAP_REQ_METHOD_DEL:
-            if (rsp->code.code_class == COAP_SUCCESS) {
-                coap_publish(req->state.node);
-                _coap_cancel(req->state.node, 0);
             }
             break;
         default:
@@ -1597,20 +1591,25 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
 {
     ZCOAP_ASSERT(req != NULL && req->msg != NULL && node != NULL);
     req->state.node = node->singleton ? node : NULL;
+    coap_ct_t ct;
+    size_t len;
+    const void *payload;
+    EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
+    coap_code_t rc;
+    if ((rc = coap_process_observe_req(node, req, nopts, opts, ct))) {
+        return rc;
+    }
+
     // On successful handler dispatch, return CoAP succes, 2.00.  In such a
     // case, the handler becomes responsible for responding to the client and
     // calling discard.
     //
     // On failure, return an appropriate error code.
-    coap_ct_t ct;
-    size_t len;
-    const void *payload;
     switch (req->msg->code.code_class) {
         case COAP_REQ:
             switch (req->msg->code.code_detail) {
                 case COAP_REQ_METHOD_GET:
                     if (node->GET) {
-                        EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing GET for path '%s'", __func__, node->name);
                         (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
@@ -1620,7 +1619,6 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     }
                 case COAP_REQ_METHOD_PUT:
                     if (node->PUT) {
-                        EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing PUT for path '%s'", __func__, node->name);
                         (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
@@ -1630,7 +1628,6 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     }
                 case COAP_REQ_METHOD_POST:
                     if (node->POST) {
-                        EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing POST for path '%s'", __func__, node->name);
                         (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
@@ -1640,7 +1637,6 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     }
                 case COAP_REQ_METHOD_DEL:
                     if (node->DEL) {
-                        EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing DEL for path '%s'", __func__, node->name);
                         (*node->DEL)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
                         return COAP_CODE(COAP_SUCCESS, 0);
@@ -1682,7 +1678,7 @@ static int coap_node_cmp(const void * const p, const void * const q)
 }
 
 /**
- * URI tree children are stored in null-terminated arrays.  Count the passed
+ * UrI tree children are stored in null-terminated arrays.  Count the passed
  * node's children.
  *
  * @param node URI tree node for which to count children
@@ -2436,7 +2432,7 @@ static coap_code_t coap_unsubscribe(coap_req_data_t *req, coap_node_t * const no
  * @param parsed options array
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
+static coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
 {
     ZCOAP_ASSERT(node != NULL && req != NULL && req->msg != NULL && req->msg->code.code_class == COAP_REQ);
     // Find *an* occurrence of an observe option.  Behavior for client
@@ -2447,34 +2443,24 @@ coap_code_t coap_process_observe_req(coap_node_t * const node, coap_req_data_t *
     if (observe_opt == NULL) {
         return 0; // Non-error zero return.
     }
-    coap_code_t rc;
     if (req->msg->code.code_detail != COAP_REQ_METHOD_GET) {
-        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-        coap_status_rsp(req, rc);
-        return rc;
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
     }
     coap_obs_seq_t seq;
+    coap_code_t rc;
     if ((rc = extract_obs_seq(observe_opt, &seq))) {
-        coap_status_rsp(req, rc);
         return rc;
     }
     switch (seq) {
         case COAP_OBS_REGISTER: {
-            rc = coap_subscribe(req, node, ct);
-            break;
+            return coap_subscribe(req, node, ct);
         }
         case COAP_OBS_DEREGISTER: {
-            rc = coap_unsubscribe(req, node);
-            break;
+            return coap_unsubscribe(req, node);
         }
         default:
-            rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-            break;
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
     }
-    if (rc) {
-        coap_status_rsp(req, rc);
-    }
-    return rc;
 }
 
 /**
