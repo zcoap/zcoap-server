@@ -917,11 +917,7 @@ static int compute_rsp_pdu_len(coap_req_data_t * const req, const size_t nopts, 
  * @param rsp (out) CoAP response buffer to write into - must be large enough to hold token and options!
  * @return pointer to payload marker write location on success, NULL on failure
  */
-static uint8_t *
-#ifdef __GNUC__
-__attribute__((nonnull (1, 5)))
-#endif
-populate_rsp_header(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], coap_msg_t *rsp)
+static uint8_t *populate_rsp_header(coap_req_data_t * const req, const coap_code_t code, const size_t nopts, const coap_opt_t opts[], coap_msg_t *rsp)
 {
     // Check arguments.
     if (req == NULL || req->msg == NULL || rsp == NULL) {
