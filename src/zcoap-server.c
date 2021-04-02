@@ -2120,7 +2120,7 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
     } else {
         coap_unlock(node);
     }
-       
+
     // Transmit the response!
     (*req->responder)(req, pdu_len, rsp);
     // Free our memory and cleanup.
