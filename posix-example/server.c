@@ -21,6 +21,7 @@
 #define COAP_MULTICAST_IPV4_ADDR "224.0.1.187"
 #define COAP_MULTICAST_IPV6_SITE_LOCAL "ff02::fd"
 #define COAP_MULTICAST_IPV6_LINK_LOCAL "ff05::fd"
+#define MAX_UDP_PAYLOAD 65527
 
 // We have a second server exposed on private loopback.  We can't collide with
 // the public server port because that is bound to ANY_ADDR.  So we allocate
@@ -178,9 +179,8 @@ static void exit_handler(int signal)
 /*
  * Receive a CoAP PDU on the passed socket file descriptor.
  */
-static int coap_recv(int fd, ssize_t pending, coap_node_t root)
+static int coap_recv(int fd, ssize_t pending, uint8_t *buf, coap_node_t root)
 {
-    uint8_t buf[pending];
     struct sockaddr_in cli_addr =  { 0 };
     socklen_t cli_len = sizeof(cli_addr);
     errno = 0;
@@ -421,6 +421,7 @@ int main(int argc, char *argv[])
 
     // Execute the main server loop.
     int exit_code = 0;
+    uint8_t *buf = NULL;
     while (true) {
 
         if (exit_request) {
@@ -446,24 +447,55 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+	size_t len = sizeof(coap_msg_t); // Start at the minimum message size and grow from there.
+	buf = malloc(len);
+	if (buf == NULL) {
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "buffer allocation failed");
+            exit_code = EXIT_FAILURE;
+            goto server_cleanup;
+	}
         for (size_t i = 0; i < NELM(servers); ++i) {
             if (FD_ISSET(servers[i].fd, &fds)) {
-                errno = 0;
-                ssize_t pending = recv(servers[i].fd, NULL, 0, MSG_PEEK | MSG_TRUNC);
-                if (pending < 0) {
-                    ZCOAP_LOG(ZCOAP_LOG_ERR, "recv failed with %d (%s)", errno, strerror(errno));
-                    exit_code = EXIT_FAILURE;
-                    goto server_cleanup;
-                }
-                if (coap_recv(servers[i].fd, pending, servers[i].root) < 0) {
-                    exit_code = EXIT_FAILURE;
-                    goto server_cleanup;
-                }
+	        while (1) {
+                    errno = 0;
+		    struct iovec iov = { .iov_base = buf, .iov_len = len };
+		    struct msghdr msg = { .msg_iov = &iov, .msg_iovlen = 1 };
+		    ssize_t pending = recvmsg(servers[i].fd, &msg, MSG_PEEK);
+                    if (pending < 0) {
+                        ZCOAP_LOG(ZCOAP_LOG_ERR, "recvmsg failed with %d (%s)", errno, strerror(errno));
+                        exit_code = EXIT_FAILURE;
+                        goto server_cleanup;
+                    }
+		    if (msg.msg_flags & MSG_TRUNC) {
+		        if (len >= MAX_UDP_PAYLOAD) {
+                            ZCOAP_LOG(ZCOAP_LOG_ERR, "truncation detected, but buffer is at maximum size");
+                            exit_code = EXIT_FAILURE;
+                            goto server_cleanup;
+			}
+		        len = len * 2 > MAX_UDP_PAYLOAD ? MAX_UDP_PAYLOAD : len * 2;
+			free(buf);
+			buf = malloc(len);
+			if (buf == NULL) {
+                            ZCOAP_LOG(ZCOAP_LOG_ERR, "buffer allocation failed");
+                            exit_code = EXIT_FAILURE;
+                            goto server_cleanup;
+			}
+		        continue;
+		    }
+                    if (coap_recv(servers[i].fd, pending, buf, servers[i].root) < 0) {
+                        exit_code = EXIT_FAILURE;
+                        goto server_cleanup;
+                    }
+		    break;
+		}
             }
         }
     }
 
     server_cleanup:
+    pthread_sigmask(SIG_SETMASK, &orig_mask, NULL);
+    exit_request = true;
+    free(buf);
     pthread_kill(polling_thread, SIGUSR1);
     pthread_join(polling_thread, NULL);
     CLOSE_SOCKS(servers);

@@ -37,12 +37,12 @@ typedef pthread_mutex_t coap_lock_t;
 #include <syslog.h>
 #define ZCOAP_VLOG(_level, _fmt, _ap) ({\
     if (1) {\
-        vsyslog(_level, _fmt, _ap);\
+        vsyslog(ZCOAP_LOG_ERR, _fmt, _ap);\
     }\
 })
 #define ZCOAP_LOG(_level, _args...) ({\
     if (1) {\
-        syslog(_level, _args);\
+        syslog(ZCOAP_LOG_ERR, _args);\
     }\
 })
 #endif /* ZCOAP_PLATFORM_H */
