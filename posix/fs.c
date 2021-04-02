@@ -158,11 +158,13 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 coap_code_t create_coap_fs_node(const coap_node_t * const parent, const char *name, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!parent || !name || !recursor) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     if (   strchr(name, '/') // Path segment injection is impermissible!
         || !strcmp(name, "..") // Navigation up the tree is impermissible!
         || !strcmp(name, ".")) { // Reference to self is impermissible!
+        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: illegal client path segment '%s'", __func__, name);
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
     }
     const char *parent_path = parent->metadata;
@@ -230,6 +232,7 @@ coap_code_t create_coap_fs_node(const coap_node_t * const parent, const char *na
 coap_code_t coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recursor, const void *recursor_data)
 {
     if (!parent || !recursor || !parent->metadata) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
     }
     coap_code_t rc = 0;
@@ -239,10 +242,10 @@ coap_code_t coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recurso
     if (!d) {
         int err = errno;
         if (err && err != ENOTDIR && err != EACCES) {
-            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error opening '%s'; %d (%s)\n", __func__, parent_path, err, strerror(err));
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: error opening '%s'; %d (%s)\n", __func__, parent_path, err, strerror(err));
             rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
         }
-        goto coap_fs_gen_out;
+        return rc;
     }
     struct dirent *entry;
     while ((entry = readdir(d)) != NULL) {
@@ -251,10 +254,9 @@ coap_code_t coap_fs_gen(const coap_node_t * const parent, coap_recurse_t recurso
             continue;
         }
         if ((rc = create_coap_fs_node(parent, entry->d_name, recursor, recursor_data))) {
-            goto coap_fs_gen_out;
+            break;
         }
     }
-    coap_fs_gen_out:
     closedir(d);
     return rc;
 }
