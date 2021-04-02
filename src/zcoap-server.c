@@ -2981,10 +2981,14 @@ static coap_code_t iter_coap_sort(coap_node_t * const node, const void *data)
         coap_node_t child = **c;
         child.parent = node;
         child.singleton = child.singleton ? false : node->singleton; // singleton is inherited
-        iter_coap_sort(&child, data);
+        ZCOAP_ASSERT(!iter_coap_sort(&child, data));
     }
     if (node->gen) {
-        (*node->gen)(node, &iter_coap_sort, data);
+        ZCOAP_ASSERT(!(*node->gen)(node, &iter_coap_sort, data));
+    }
+    if (node->validate) {
+        const char *err = (*node->validate)(node, node->data);
+        ZCOAP_ASSERT(!err);
     }
     return 0;
 }
