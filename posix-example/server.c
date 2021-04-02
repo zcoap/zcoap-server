@@ -45,7 +45,7 @@ static int sockaddr_in_cmp(const void *_a, const void *_b)
     return 0;
 }
 
-static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
+static coap_sub_map_t subs = { .endpoint_cmp = &sockaddr_in_cmp };
 
 /**
  * Emit a log message at level LOG_ERR and exit(EXIT_FAILURE).
@@ -178,14 +178,14 @@ static void exit_handler(int signal)
 /*
  * Receive a CoAP PDU on the passed socket file descriptor.
  */
-static int coap_recv(int fd, ssize_t pending, coap_node_t root)
+static int coap_recv(int fd, coap_node_t root)
 {
-    uint8_t buf[pending];
+    uint8_t buf[65535];
     struct sockaddr_in cli_addr =  { 0 };
     socklen_t cli_len = sizeof(cli_addr);
     errno = 0;
     ssize_t received = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &cli_len);
-    if (received != pending) {
+    if (received < 0) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "recvfrom failed with %d (%s)", errno, strerror(errno));
         return -1;
     }
@@ -449,13 +449,7 @@ int main(int argc, char *argv[])
         for (size_t i = 0; i < NELM(servers); ++i) {
             if (FD_ISSET(servers[i].fd, &fds)) {
                 errno = 0;
-                ssize_t pending = recv(servers[i].fd, NULL, 0, MSG_PEEK | MSG_TRUNC);
-                if (pending < 0) {
-                    ZCOAP_LOG(ZCOAP_LOG_ERR, "recv failed with %d (%s)", errno, strerror(errno));
-                    exit_code = EXIT_FAILURE;
-                    goto server_cleanup;
-                }
-                if (coap_recv(servers[i].fd, pending, servers[i].root) < 0) {
+                if (coap_recv(servers[i].fd, servers[i].root) < 0) {
                     exit_code = EXIT_FAILURE;
                     goto server_cleanup;
                 }
