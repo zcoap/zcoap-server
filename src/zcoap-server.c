@@ -1144,7 +1144,7 @@ __attribute__((nonnull (1, 2, 3)))
 alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t * const sub)
 {
     ZCOAP_ASSERT(map != NULL && req != NULL && sub != NULL);
-    coap_subscriber_t needle = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
+    coap_subscriber_t needle = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
     coap_subscriber_t *key = &needle;
     coap_subscriber_t **_subscriber = map->subscribers ? bsearch(&key, map->subscribers, map->n_subscribers, sizeof(map->subscribers[0]), &sub_map_cmp) : NULL;
     coap_subscriber_t *subscriber = _subscriber ? *_subscriber : NULL;
@@ -1171,7 +1171,7 @@ alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t
         ZCOAP_ASSERT(req->endpoint != NULL);
         subscriber->deep_copy_endpoint = *req->endpoint; // must deep-copy subscriber endpoint information
         subscriber->endpoint = &subscriber->deep_copy_endpoint;
-        subscriber->cmp = req->endpoint_cmp;
+        subscriber->cmp = map->endpoint_cmp;
         subscriber->responder = req->responder;
         subscriber->context = req->context;
         ++map->n_subscribers;
@@ -1301,7 +1301,7 @@ static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coa
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
-    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
     coap_sub_t needle = { .node = node, .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
@@ -1445,7 +1445,7 @@ static coap_code_t unsubscribe(coap_req_data_t *req, coap_node_t * const node)
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
-    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = req->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
     coap_sub_t needle = { .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
@@ -1564,12 +1564,12 @@ coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(ack != NULL && root != NULL);
     coap_sub_map_t * const map = root->tsubs;
-    ZCOAP_ASSERT((map == NULL) == (ack->endpoint_cmp == NULL));
-    if (map == NULL || ack->endpoint_cmp == NULL) {
+    ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
+    if (map == NULL || map->endpoint_cmp == NULL) {
         coap_discard(ack);
         return;
     }
-    coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = ack->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = map->endpoint_cmp };
     coap_sub_t needle = { .subscriber = &subscriber, .msg_ID = ack->msg->msg_ID };
     coap_sub_t *key = &needle;
     ZCOAP_LOCK(&map->lock);
@@ -1599,8 +1599,8 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(reset != NULL && root != NULL);
     coap_sub_map_t * const map = root->tsubs;
-    ZCOAP_ASSERT((map == NULL) == (reset->endpoint_cmp == NULL));
-    if (map == NULL || reset->endpoint_cmp == NULL) {
+    ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
+    if (map == NULL || map->endpoint_cmp == NULL) {
         coap_discard(reset);
         return;
     }
@@ -1611,7 +1611,7 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
         coap_sub_t **sub = &map->subtokmap[idx];
         ZCOAP_ASSERT(sub != NULL && (*sub)->subscriber != NULL);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%" PRIx64, __func__, *sub, (*sub)->subscriber, (*sub)->token);
-        if (reset->endpoint_cmp(reset->endpoint, (*sub)->subscriber->endpoint)) {
+        if (map->endpoint_cmp(reset->endpoint, (*sub)->subscriber->endpoint)) {
             ++idx;
             continue;
         }

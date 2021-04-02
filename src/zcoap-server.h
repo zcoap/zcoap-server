@@ -337,12 +337,53 @@ typedef uint32_t coap_obs_seq_t;
 #define COAP_OBS_SEQ_BITS 24
 
 typedef struct coap_sub_map_s {
-    coap_subscriber_t **subscribers; // sorted on endpoint
+    /**
+     * n_subscribers
+     *
+     * The number of subscribers in the subscribers map.
+     */
     size_t n_subscribers;
-    coap_sub_t **subtokmap; // sorted on endpoint+token
+    /**
+     * Map of subscribers sorted by endpoint.
+     */
+    coap_subscriber_t **subscribers; // sorted on endpoint
+    /**
+     * n_subscriptions
+     *
+     * The number of subscriptions in the subtokmap and subidmap.
+     */
     size_t n_subscriptions;
+    /**
+     * subtokmap
+     *
+     * Map of subscriptions sorted by endpoint+token.
+     */
+    coap_sub_t **subtokmap; // sorted on endpoint+token
+    /**
+     * subidmap
+     *
+     * Map of subscriptions sorted by endpoint+id.  This implementation embeds a
+     * subscription ID within the message ID field to provide
+     * subscription-specific differentiation of ACKs and reset messages
+     * originating from common endpoints.
+     */
     coap_sub_t **subidmap; // sorted on endpoint+id
+    /**
+     * lock
+     *
+     * Implementation-specific lock structure.  The server acquires the lock
+     * when reading or writing subscription map structures.
+     */
     coap_lock_t lock;
+    /**
+     * endpoint_cmp
+     *
+     * Implementation-specific 'endpoint-comparison' function.  This is called by
+     * the server to compare client response routing information.  This can be used
+     * to identify duplicate subscriptions, match client-to-server ACKs with
+     * subscriptions and to sort subscriptions.
+     */
+    coap_endpoint_cmp_t endpoint_cmp;
 } coap_sub_map_t;
 
 // End RFC 7651 Observable structures
@@ -414,16 +455,6 @@ struct coap_req_data_s {
      * stand-alone ACK, piggy-backed response and non-piggy-backed response.
      */
     coap_responder_t responder;
-
-    /**
-     * endpoint_cmp
-     *
-     * Implementation-specific 'endpoint-comparison' function.  This is called by
-     * the server to compare client response routing information.  This can be used
-     * to identify duplicate subscriptions, match client-to-server ACKs with
-     * subscriptions and to sort subscriptions.
-     */
-    coap_endpoint_cmp_t endpoint_cmp;
 
     /**
      * Used by the server internally to maintain state.  Cleared on injection

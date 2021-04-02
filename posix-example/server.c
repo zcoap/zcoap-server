@@ -28,7 +28,24 @@
 #define PRIVATE_SERVER_PORT 12000
 #define PRIVATE_SERVER_ADDR INADDR_LOOPBACK
 
-static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER };
+/**
+ * Compare two sockaddr_in structs.  The server needs this to match subscriber
+ * endpoints to subscriptions.
+ */
+static int sockaddr_in_cmp(const void *_a, const void *_b)
+{
+    const struct sockaddr_in *a = (const struct sockaddr_in *)_a;
+    const struct sockaddr_in *b = (const struct sockaddr_in *)_b;
+    if (a->sin_addr.s_addr != b->sin_addr.s_addr) {
+        return a->sin_addr.s_addr < b->sin_addr.s_addr ? -1 : 1;
+    }
+    if (a->sin_port != b->sin_port) {
+        return a->sin_port < b->sin_port ? -1 : 1;
+    }
+    return 0;
+}
+
+static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
 
 /**
  * Emit a log message at level LOG_ERR and exit(EXIT_FAILURE).
@@ -129,23 +146,6 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
 }
 
 /**
- * Compare two sockaddr_in structs.  The server needs this to match subscriber
- * endpoints to subscriptions.
- */
-static int sockaddr_in_cmp(const void *_a, const void *_b)
-{
-    const struct sockaddr_in *a = (const struct sockaddr_in *)_a;
-    const struct sockaddr_in *b = (const struct sockaddr_in *)_b;
-    if (a->sin_addr.s_addr != b->sin_addr.s_addr) {
-        return a->sin_addr.s_addr < b->sin_addr.s_addr ? -1 : 1;
-    }
-    if (a->sin_port != b->sin_port) {
-        return a->sin_port < b->sin_port ? -1 : 1;
-    }
-    return 0;
-}
-
-/**
  * Dispatch a received datagram payload into our CoAP server!
  *
  * @param cli_addr client socket address for server responses
@@ -157,7 +157,6 @@ static void dispatch(int sockfd, coap_node_t root, struct sockaddr_in *cli_addr,
     coap_req_data_t req = {
         .context = sockfd,
         .endpoint = cli_addr,
-        .endpoint_cmp = &sockaddr_in_cmp,
         .msg = (const coap_msg_t *)payload,
         .len = len,
         .responder = &coap_udp_respond,
