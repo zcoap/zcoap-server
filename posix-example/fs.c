@@ -144,7 +144,7 @@ void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 /**
  * Produce a properly formed coap_fs node below parent of the passed name.
  * A properly formed coap_fs node has a local filesystem path set at
- * node->metadat.
+ * node->metadata.
  *
  * Pass the dynamically-created child node to the passed recursor to continue
  * recursing.

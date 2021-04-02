@@ -5621,7 +5621,7 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err = NULL;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5657,7 +5657,7 @@ void coap_put_u16(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err = NULL;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5695,7 +5695,7 @@ void coap_put_u32(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5731,7 +5731,7 @@ void coap_put_u64(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5769,7 +5769,7 @@ void coap_put_i16(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5805,7 +5805,7 @@ void coap_put_i32(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err = NULL;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5841,7 +5841,7 @@ void coap_put_i64(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err = NULL;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5876,7 +5876,7 @@ void coap_put_float(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
@@ -5911,7 +5911,7 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     const char *err;
-    if (node->validate && (err = (*node->validate)(&val))) {
+    if (node->validate && (err = (*node->validate)(node, &val))) {
         coap_detail_rsp(req, COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ), err);
     } else if (node->data == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
