@@ -68,8 +68,8 @@ add_executable(example-server-posix
                posix-example/public.c
                posix-example/private.h
                posix-example/private.c
-               posix-example/fs.h
-               posix-example/fs.c)
+               posix/fs.h
+               posix/fs.c)
 
 find_package (Threads)
 target_link_libraries(example-server-posix
