@@ -14,7 +14,7 @@
 // /tmp -> coap://tmp
 // /sys/power -> coap://telemetry/power
 
-static coap_lock_t tmp_lock = PTHREAD_MUTEX_INITIALIZER;
+static coap_lock_t tmp_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER; // zcoap-server requires recursive locks!
 static coap_node_t tmp = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DEL = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node, .lock = &tmp_lock };
 static coap_node_t power = { .name = "power", .gen = &coap_fs_gen, .GET = &coap_fs_get, .metadata = "/sys/power", .wildcard = &create_coap_fs_node };
 static coap_node_t *root_children[] = { &wellknown_uri, &tmp, &power, NULL };
