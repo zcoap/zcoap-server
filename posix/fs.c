@@ -67,17 +67,12 @@ void coap_fs_get(ZCOAP_METHOD_SIGNATURE)
 
 /**
  * Write the client-enclosed payload to the local file at path node->metadata.
- *
- * This method may be used for coap_fs_gen mount point nodes and their
- * dynamically-generated children.  This may also be used for any static nodes
- * for which the implementer desires PUT to write to a local filesystem
- * resource.  All that's needed to do this is to define a coap_node_t as:
- *
- * const coap_node_t my_node = { .name "my_node_name", .PUT = &coap_fs_put, .metadata = "$LOCAL_FILE_PATH" };
+ * Writes can be in write mode (PUT) or append mode (POST).
  */
-void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
+static void coap_fs_modify(const char *mode, ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_STREAM, ZCOAP_FMT_SENTINEL);
+    ZCOAP_ASSERT(!strcmp(mode, "w") || !strcmp(mode, "a"));
     const char *path = node->metadata;
     if (path == NULL) {
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: error, path is null\n", __func__);
@@ -85,7 +80,7 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
         return;
     }
     errno = 0;
-    FILE *fptr = fopen(path, "w");
+    FILE *fptr = fopen(path, mode);
     if (fptr == NULL) {
         int err = errno;
         if (err == EACCES) {
@@ -109,6 +104,37 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
 }
 
 /**
+ * Write the client-enclosed payload to the local file at path node->metadata.
+ *
+ * This method may be used for coap_fs_gen mount point nodes and their
+ * dynamically-generated children.  This may also be used for any static nodes
+ * for which the implementer desires PUT to write to a local filesystem
+ * resource.  All that's needed to do this is to define a coap_node_t as:
+ *
+ * const coap_node_t my_node = { .name "my_node_name", .PUT = &coap_fs_put, .metadata = "$LOCAL_FILE_PATH" };
+ */
+void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
+{
+    coap_fs_modify("w", ZCOAP_METHOD_ARGS);
+}
+
+/**
+ *
+ * Append the client-enclosed payload to the local file at path node->metadata.
+ *
+ * This method may be used for coap_fs_gen mount point nodes and their
+ * dynamically-generated children.  This may also be used for any static nodes
+ * for which the implementer desires PUT to write to a local filesystem
+ * resource.  All that's needed to do this is to define a coap_node_t as:
+ *
+ * const coap_node_t my_node = { .name "my_node_name", .POST = &coap_fs_post, .metadata = "$LOCAL_FILE_PATH" };
+ */
+void coap_fs_post(ZCOAP_METHOD_SIGNATURE)
+{
+    coap_fs_modify("a", ZCOAP_METHOD_ARGS);
+}
+
+/**
  * Remove the local file at path node->metadata.
  *
  * This method may be used for coap_fs_gen mount point nodes and their
@@ -116,7 +142,7 @@ void coap_fs_put(ZCOAP_METHOD_SIGNATURE)
  * for which the implementer desires DELETE to remove a local filesystem
  * resource.  All that's needed to do this is to define a coap_node_t as:
  *
- * const coap_node_t my_node = { .name "my_node_name", .PUT = &coap_fs_DELETE, .metadata = "$LOCAL_FILE_PATH" };
+ * const coap_node_t my_node = { .name "my_node_name", .DEL = &coap_fs_DELETE, .metadata = "$LOCAL_FILE_PATH" };
  */
 void coap_fs_delete(ZCOAP_METHOD_SIGNATURE)
 {
@@ -176,7 +202,7 @@ coap_code_t create_coap_fs_node(const coap_node_t * const parent, const char *na
     path[parent_path_len] = '/';
     memcpy(&path[parent_path_len + 1], name, name_len);
     path[path_len] = '\0';
-    coap_node_t child = { .name = name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .DEL = parent->DEL, .gen = &coap_fs_gen, .metadata = path };
+    coap_node_t child = { .name = name, .parent = parent , .GET = parent->GET, .PUT = parent->PUT, .POST = parent->POST, .DEL = parent->DEL, .gen = &coap_fs_gen, .metadata = path };
     return (*recursor)(&child, recursor_data);
 }
 
@@ -191,15 +217,15 @@ coap_code_t create_coap_fs_node(const coap_node_t * const parent, const char *na
  * To mount a filesystem path into the URI tree, simply define a node in the
  * tree as follows:
  *
- * const coap_node_t my_node = { .name "my_node_name", .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .metadata = "$LOCAL_PATH" };
+ * const coap_node_t my_node = { .name "my_node_name", .GET = &coap_fs_get, .PUT = &coap_fs_put, .POST = &coap_fs_post, .DELETE = &coap_fs_delete, .metadata = "$LOCAL_PATH" };
  *
  * An originator node may also be defined with the 'wildcard' method.  We
  * provide a helper callback for this purpose.  An example use of the wildcard:
  *
- * static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DELETE = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node };
+ * static const coap_node_t tmp_uri = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .POST = &coap_fs_post, .DELETE = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node };
  *
  * This allows for wildcard match to the client request path, thus providing
- * a means to create nodes in the tree with PUT.
+ * a means to create nodes in the tree with PUT and POST.
  *
  * Methods referenced at the static originator node (my_node in this example)
  * are copied to dynamically-genereated children, thus imparting privileges
