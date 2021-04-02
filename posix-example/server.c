@@ -32,6 +32,10 @@
 /**
  * Compare two sockaddr_in structs.  The server needs this to match subscriber
  * endpoints to subscriptions.
+ *
+ * @param _a sockaddr_in for comparison
+ * @param _b sockaddr_in for comparison
+ * @return -1 if a<b, 0 if a==b, 1 if a>b
  */
 static int sockaddr_in_cmp(const void *_a, const void *_b)
 {
@@ -49,7 +53,7 @@ static int sockaddr_in_cmp(const void *_a, const void *_b)
 static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
 
 /**
- * Emit a log message at level LOG_ERR and exit(EXIT_FAILURE).
+ * Emit a log message at level ERR and exit(EXIT_FAILURE).
  *
  * @param fmt printf format string
  * @paarm ... printf arguments
@@ -178,15 +182,21 @@ static void exit_handler(int signal)
 
 /*
  * Receive a CoAP PDU on the passed socket file descriptor.
+ *
+ * @param fd socket file descriptor to read from
+ * @param pending the number of bytes pending at the socket
+ * @param buf allocated buffer to read into; must be large enough to hold all pending bytes
+ * @param root CoAP tree root to pass into zcoap-server
+ * @return 0 on success, -1 on error
  */
 static int coap_recv(int fd, ssize_t pending, uint8_t *buf, coap_node_t root)
 {
     struct sockaddr_in cli_addr =  { 0 };
     socklen_t cli_len = sizeof(cli_addr);
     errno = 0;
-    ssize_t received = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr *)&cli_addr, &cli_len);
+    ssize_t received = recvfrom(fd, buf, pending, 0, (struct sockaddr *)&cli_addr, &cli_len);
     if (received != pending) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "recvfrom failed with %d (%s)", errno, strerror(errno));
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "recvfrom failed with %d (%s)zd", errno, strerror(errno));
         return -1;
     }
     if (cli_len > sizeof(cli_addr)) {
