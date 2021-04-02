@@ -17,7 +17,6 @@
 
 #define NELM(_array) (sizeof(_array) / sizeof(_array[0]))
 
-#define DEFAULT_COAP_SERVER_PORT 5683
 #define COAP_MULTICAST_IPV4_ADDR "224.0.1.187"
 #define COAP_MULTICAST_IPV6_SITE_LOCAL "ff02::fd"
 #define COAP_MULTICAST_IPV6_LINK_LOCAL "ff05::fd"
@@ -219,7 +218,7 @@ static int coap_recv(int fd, ssize_t pending, uint8_t *buf, coap_node_t root)
  */
 int bind_public_address(int sockfd)
 {
-    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(DEFAULT_COAP_SERVER_PORT),
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_port = htons(COAP_PORT),
                                 .sin_addr = { .s_addr = INADDR_ANY } };
     // Register on the CoAP broadcast addresses.
     struct ip_mreq mreq = { .imr_multiaddr = { .s_addr = inet_addr(COAP_MULTICAST_IPV4_ADDR) },
@@ -246,7 +245,7 @@ int bind_public_address(int sockfd)
  */
 int bind_public_addressv6(int sockfd)
 {
-    struct sockaddr_in6 addr = { .sin6_family = AF_INET6, .sin6_port = htons(DEFAULT_COAP_SERVER_PORT),
+    struct sockaddr_in6 addr = { .sin6_family = AF_INET6, .sin6_port = htons(COAP_PORT),
                                  .sin6_addr = IN6ADDR_ANY_INIT };
     // Turn off IPV6_V6ONLY.  We are using two separate sockets so that we
     // can register on both the IPv4 and IPv6 multicast addressses.

@@ -15,6 +15,6 @@
 // /sys/power -> coap://telemetry/power
 
 static coap_lock_t tmp_lock = PTHREAD_MUTEX_INITIALIZER;
-static coap_node_t tmp = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .DEL = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node, .lock = &tmp_lock };
+static coap_node_t tmp = { .name = "tmp", .gen = &coap_fs_gen, .GET = &coap_fs_get, .PUT = &coap_fs_put, .POST = &coap_fs_post, .DEL = &coap_fs_delete, .metadata = "/tmp", .wildcard = &create_coap_fs_node, .lock = &tmp_lock };
 static coap_node_t *root_children[] = { &wellknown_uri, &tmp, NULL };
 const coap_node_t private_server_root = { .children = root_children };

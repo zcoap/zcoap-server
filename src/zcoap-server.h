@@ -15,6 +15,9 @@
 #include <stddef.h>
 #include "config.h"
 
+#define COAP_PORT 5683
+#define COAPS_PORT 5684
+
 typedef enum coap_type_e {
     COAP_TYPE_CONFIRMABLE = 0,
     COAP_TYPE_NON_CONFIRMABLE = 1,
@@ -645,6 +648,13 @@ typedef struct coap_msg_opt_s {
  * method functions for a given implementation should use this.
  */
 #define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, size_t * const ctcnt, coap_ct_t * const cts
+
+/**
+ * ZCOAP_METHOD_ARGS
+ *
+ * Convenience macro for passing arguments to zcoap-server method handlers.
+ */
+#define ZCOAP_METHOD_ARGS node, req, nopts, opts, ct, len, payload, ctcnt, cts
 
 /**
  * ZCOAP_METHOD_HEADER
