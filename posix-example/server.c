@@ -325,7 +325,7 @@ int main(int argc, char *argv[])
     };
 
     // Add our and subscriber map.  It is our choice as to whether our
-    // implementation encloses a map-per tree or a single map.  We choose a
+    // implementation encloses a map-per-tree or a single map.  We choose a
     // single map for simple publishing and garbage collection.  If we were
     // operating a thread pool and wished to reduce tree-to-tree contention,
     // we could instead establish a subscription map for each tree.
