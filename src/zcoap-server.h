@@ -930,6 +930,8 @@ extern void coap_publish_all(coap_sub_map_t *map); // publish an update to all o
 extern void coap_cancel(coap_node_t *node); // cancel all subscriptions for the passed node
 extern void coap_cancel_all(coap_sub_map_t *map); // cancel all observer subscriptions
 extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
+extern void coap_lock(const coap_node_t *node);
+extern void coap_unlock(const coap_node_t *node);
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);

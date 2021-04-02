@@ -162,8 +162,6 @@
  * Note that only library getters and setters call the locks by default.
  * Implementation-defined method functions must also call the lock macros or
  * otherwise manage synchronization on their own.
- *
- * WARNING: PLATFORM LOCKS MUST BE RECURSIVE!
  */
 #define ZCOAP_LOCK(void){}
 #define ZCOAP_UNLOCK(void){}

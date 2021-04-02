@@ -966,7 +966,7 @@ static const coap_node_t *get_root(const coap_node_t * const node)
  *
  * @param node URI tree node from which to traverse upward to locate and acquire a lock
  */
-static void coap_lock(const coap_node_t *node)
+void coap_lock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
         node = node->parent;
@@ -981,7 +981,7 @@ static void coap_lock(const coap_node_t *node)
  *
  * @param node URI tree node from which to traverse upward to locate and relinquish a lock
  */
-static void coap_unlock(const coap_node_t *node)
+void coap_unlock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
         node = node->parent;

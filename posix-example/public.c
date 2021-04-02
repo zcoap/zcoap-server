@@ -41,5 +41,5 @@ static coap_node_t *telemetry_children[] = { &temperature, &digits, &name, NULL 
 coap_node_t telemetry = { .name = "telemetry", .children = telemetry_children };
 
 static coap_node_t *root_children[] = { &wellknown_uri, &telemetry, NULL };
-static coap_lock_t tree_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER; // zcoap-server requires recursive locks!
+static coap_lock_t tree_lock = PTHREAD_MUTEX_INITIALIZER;
 const coap_node_t public_server_root = { .children = root_children, .lock = &tree_lock };

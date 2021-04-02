@@ -45,8 +45,7 @@ static int sockaddr_in_cmp(const void *_a, const void *_b)
     return 0;
 }
 
-// zcoap-server requires recursive locks!
-static coap_sub_map_t subs = { .lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
+static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
 
 /**
  * Emit a log message at level LOG_ERR and exit(EXIT_FAILURE).
