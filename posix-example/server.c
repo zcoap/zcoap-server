@@ -17,9 +17,6 @@
 
 #define NELM(_array) (sizeof(_array) / sizeof(_array[0]))
 
-#define COAP_MULTICAST_IPV4_ADDR "224.0.1.187"
-#define COAP_MULTICAST_IPV6_SITE_LOCAL "ff02::fd"
-#define COAP_MULTICAST_IPV6_LINK_LOCAL "ff05::fd"
 #define MAX_UDP_PAYLOAD 65527
 
 // We have a second server exposed on private loopback.  We can't collide with

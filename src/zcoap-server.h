@@ -17,6 +17,9 @@
 
 #define COAP_PORT 5683
 #define COAPS_PORT 5684
+#define COAP_MULTICAST_IPV4_ADDR "224.0.1.187"
+#define COAP_MULTICAST_IPV6_SITE_LOCAL "ff02::fd"
+#define COAP_MULTICAST_IPV6_LINK_LOCAL "ff05::fd"
 
 typedef enum coap_type_e {
     COAP_TYPE_CONFIRMABLE = 0,
