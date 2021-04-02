@@ -36,13 +36,20 @@ typedef pthread_mutex_t coap_lock_t;
 
 #include <syslog.h>
 #define ZCOAP_VLOG(_level, _fmt, _ap) ({\
-    if (1) {\
-        vsyslog(ZCOAP_LOG_ERR, _fmt, _ap);\
+    if ((_level) <= ZCOAP_LOG_ERR) {\
+        vsyslog(_level, _fmt, _ap);\
     }\
 })
 #define ZCOAP_LOG(_level, _args...) ({\
-    if (1) {\
-        syslog(ZCOAP_LOG_ERR, _args);\
+    if ((_level) <= ZCOAP_LOG_ERR) {\
+        syslog(_level, _args);\
+    }\
+})
+
+#define ZCOAP_ASSERT(_condition) ({\
+    if (!(_condition)) {\
+        ZCOAP_LOG(ZCOAP_LOG_CRIT, "Assertion failed, function %s, line %d.", __func__, __LINE__);\
+        exit(EXIT_FAILURE);\
     }\
 })
 #endif /* ZCOAP_PLATFORM_H */
