@@ -936,10 +936,13 @@ typedef uint8_t zcoap_bool_t;
 #define ZCOAP_FALSE_STR "false"
 
 extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_content_fmt_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_accept_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
 extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, uint32_t* size1);
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
+
 extern void coap_publish(coap_node_t *node); // publish an update to observers of the passed node
 extern void coap_publish_all(coap_sub_map_t *map); // publish an update to all observers
 extern void coap_cancel(coap_node_t *node); // cancel all subscriptions for the passed node
@@ -953,15 +956,15 @@ extern void coap_status_rsp(coap_req_data_t* req, coap_code_t code);
 extern void coap_detail_rsp(coap_req_data_t* req, coap_code_t code, const char* detail);
 extern void coap_printf(coap_req_data_t* req, const char* fmt, ...);
 
-extern void coap_return_bool(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], bool val);
-extern void coap_return_u16(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint16_t val);
-extern void coap_return_u32(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint32_t val);
-extern void coap_return_u64(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, uint64_t val);
-extern void coap_return_i16(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, int16_t val);
-extern void coap_return_i32(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, int32_t val);
-extern void coap_return_i64(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, int64_t val);
-extern void coap_return_float(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, float val);
-extern void coap_return_double(coap_req_data_t *req, size_t nopts, const coap_msg_opt_t opts[], const char *fmt, ZCOAP_DOUBLE val);
+extern void coap_return_bool(coap_req_data_t *req, coap_ct_t ct, bool val);
+extern void coap_return_u16(coap_req_data_t *req, coap_ct_t ct, const char *fmt, uint16_t val);
+extern void coap_return_u32(coap_req_data_t *req, coap_ct_t ct, const char *fmt, uint32_t val);
+extern void coap_return_u64(coap_req_data_t *req, coap_ct_t ct, const char *fmt, uint64_t val);
+extern void coap_return_i16(coap_req_data_t *req, coap_ct_t ct, const char *fmt, int16_t val);
+extern void coap_return_i32(coap_req_data_t *req, coap_ct_t ct, const char *fmt, int32_t val);
+extern void coap_return_i64(coap_req_data_t *req, coap_ct_t ct, const char *fmt, int64_t val);
+extern void coap_return_float(coap_req_data_t *req, coap_ct_t ct, const char *fmt, float val);
+extern void coap_return_double(coap_req_data_t *req, coap_ct_t ct, const char *fmt, ZCOAP_DOUBLE val);
 
 extern void coap_get_string(ZCOAP_METHOD_SIGNATURE);
 extern void coap_get_bool(ZCOAP_METHOD_SIGNATURE);

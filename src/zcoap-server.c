@@ -2402,8 +2402,36 @@ static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, 
 }
 
 /**
- * Get a CoAP content type designator from a content format option in a CoAP request.
- * Parses req for its options if caller passes opts == NULL.
+ * Get a CoAP content type designator from an content format option in a CoAP request.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
+ * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
+ */
+coap_code_t coap_get_content_fmt_option(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
+}
+
+/**
+ * Get a CoAP content type designator from an accept option in a CoAP request.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
+ * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
+ */
+coap_code_t coap_get_accept_option(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
+}
+
+/**
+ * Get a CoAP content type designator from the accept option in GET request or
+ * a content format option in a PUT/POST request.
  *
  * @param req request to search for content format option
  * @param nopts number of options in the request
@@ -2413,22 +2441,26 @@ static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, 
  */
 coap_code_t coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
 {
-   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
-}
-
-/**
- * Get a CoAP content type designator from an accept option in a CoAP request.
- * Parses req for its options if caller passes opts == NULL.
- *
- * @param req request to search for content format option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
- * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
- */
-coap_code_t coap_get_accept_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
-{
-   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
+    if (ct == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    switch (req->msg->code.code_class) {
+        case COAP_REQ:
+            switch (req->msg->code.code_detail) {
+                case COAP_REQ_METHOD_GET:
+                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
+                case COAP_REQ_METHOD_PUT:
+                case COAP_REQ_METHOD_POST:
+                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
+                default:
+                    *ct = ZCOAP_FMT_NONE;
+                    return 0;
+            }
+        default:
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
 }
 
 /**
@@ -4835,18 +4867,11 @@ void coap_printf(coap_req_data_t * const req, const char *fmt, ...)
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
  * @param node server URI tree node
  */
-void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const bool val)
+void coap_return_bool(coap_req_data_t * const req, coap_ct_t ct, const bool val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -4875,18 +4900,12 @@ void coap_return_bool(coap_req_data_t * const req, const size_t nopts, const coa
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, uint16_t val)
+void coap_return_u16(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, uint16_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -4932,18 +4951,12 @@ void coap_return_u16(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, uint32_t val)
+void coap_return_u32(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, uint32_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -4989,18 +5002,12 @@ void coap_return_u32(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, uint64_t val)
+void coap_return_u64(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, uint64_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5046,18 +5053,12 @@ void coap_return_u64(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, int16_t val)
+void coap_return_i16(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, int16_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5103,18 +5104,12 @@ void coap_return_i16(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, int32_t val)
+void coap_return_i32(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, int32_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5160,18 +5155,12 @@ void coap_return_i32(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, int64_t val)
+void coap_return_i64(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, int64_t val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5217,18 +5206,12 @@ void coap_return_i64(coap_req_data_t * const req, const size_t nopts, const coap
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_float(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, float val)
+void coap_return_float(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, float val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5274,18 +5257,12 @@ void coap_return_float(coap_req_data_t * const req, const size_t nopts, const co
  * error.
  *
  * @param req originating CoAP request
- * @param nopts number of enclosed options
- * @param opts request options array
+ * @param ct requested (accept option) content type
+ * @param fmt printf format for plain text responses, or NULL for default
  * @param node server URI tree node
  */
-void coap_return_double(coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const char * const fmt, ZCOAP_DOUBLE val)
+void coap_return_double(coap_req_data_t * const req, coap_ct_t ct, const char * const fmt, ZCOAP_DOUBLE val)
 {
-    coap_ct_t ct;
-    coap_code_t coap_code;
-    if ((coap_code = coap_get_accept_type(req, nopts, opts, &ct))) {
-        coap_status_rsp(req, coap_code);
-        return;
-    }
     switch (ct) {
         case ZCOAP_FMT_NONE: // no content format option enclosed
         case COAP_FMT_TEXT: // default handling behavior is text return
@@ -5330,7 +5307,7 @@ void coap_return_double(coap_req_data_t * const req, const size_t nopts, const c
  * @param opts request options array
  * @param node server URI tree node
  */
-void coap_get_string( ZCOAP_METHOD_SIGNATURE)
+void coap_get_string(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, ZCOAP_FMT_SENTINEL);
     if (!node->data) {
@@ -5381,7 +5358,7 @@ void coap_get_bool(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         bool val = *(volatile bool *)node->data;
-        coap_return_bool(req, nopts, opts, val);
+        coap_return_bool(req, ct, val);
     }
 }
 
@@ -5406,7 +5383,7 @@ void coap_get_u16(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         uint16_t val = *(volatile unsigned *)node->data;
-        coap_return_u16(req, nopts, opts, node->fmt, val);
+        coap_return_u16(req, ct, node->fmt, val);
     }
 }
 
@@ -5431,7 +5408,7 @@ void coap_get_u32(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         uint32_t val = *(volatile uint32_t *)node->data;
-        coap_return_u32(req, nopts, opts, node->fmt, val);
+        coap_return_u32(req, ct, node->fmt, val);
     }
 }
 
@@ -5456,7 +5433,7 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         uint64_t val = *(volatile uint64_t *)node->data;
-        coap_return_u64(req, nopts, opts, node->fmt, val);
+        coap_return_u64(req, ct, node->fmt, val);
     }
 }
 
@@ -5481,7 +5458,7 @@ void coap_get_i16(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         int16_t val = *(volatile int16_t *)node->data;
-        coap_return_i16(req, nopts, opts, node->fmt, val);
+        coap_return_i16(req, ct, node->fmt, val);
     }
 }
 
@@ -5506,7 +5483,7 @@ void coap_get_i32(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         uint32_t val = *(volatile uint32_t *)node->data;
-        coap_return_i32(req, nopts, opts, node->fmt, val);
+        coap_return_i32(req, ct, node->fmt, val);
     }
 }
 
@@ -5531,7 +5508,7 @@ void coap_get_i64(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         int64_t val = *(volatile int64_t *)node->data;
-        coap_return_i64(req, nopts, opts, node->fmt, val);
+        coap_return_i64(req, ct, node->fmt, val);
     }
 }
 
@@ -5556,7 +5533,7 @@ void coap_get_float(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         float val = *(volatile float *)node->data;
-        coap_return_float(req, nopts, opts, node->fmt, val);
+        coap_return_float(req, ct, node->fmt, val);
     }
 }
 
@@ -5582,7 +5559,7 @@ void coap_get_double(ZCOAP_METHOD_SIGNATURE)
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
         ZCOAP_DOUBLE val = *(volatile ZCOAP_DOUBLE *)node->data;
-        coap_return_double(req, nopts, opts, node->fmt, val);
+        coap_return_double(req, ct, node->fmt, val);
     }
 }
 

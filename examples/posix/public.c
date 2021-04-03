@@ -29,7 +29,7 @@ static void coap_get_server_temperature(ZCOAP_METHOD_SIGNATURE)
     ZCOAP_METHOD_HEADER(COAP_FMT_TEXT, COAP_FMT_CBOR, ZCOAP_FMT_SENTINEL);
     int temperature = rand() % 100;
     max_server_temperature = temperature > max_server_temperature ? temperature : max_server_temperature; // store max
-    coap_return_int(req, nopts, opts, NULL, temperature);
+    coap_return_int(req, ct, NULL, temperature);
 }
 
 static coap_node_t max_temperature = { .name = "max", .GET = &coap_get_int, .data = &max_server_temperature };
