@@ -1045,8 +1045,8 @@ build_observe_option(coap_obs_seq_t *seq, coap_opt_t *opt)
 {
     ZCOAP_ASSERT(seq != NULL && opt != NULL);
     opt->num = COAP_OPT_OBSERVE;
-    *seq = ZCOAP_HTONL(*seq);
     opt->len = *seq <= 0xFF ? 1 : *seq <= 0xFFFF ? 2 : 3;
+    *seq = ZCOAP_HTONL(*seq);
     opt->val = (uint8_t *)seq + (sizeof(*seq) - opt->len);
 }
 
