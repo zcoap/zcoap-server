@@ -21,12 +21,12 @@ message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 #Windows
 IF (WIN32)
 
-include_directories(win32-example src)
+include_directories(examples/win32 src)
 
 ELSE()
 
 #Linux
-include_directories(posix-example src)
+include_directories(examples/posix src)
 
 #set(CMAKE_CXX_FLAGS "-Werror -Wshadow")
 #set(CMAKE_C_FLAGS "-Werror -Wshadow")
@@ -39,8 +39,8 @@ add_library(zcoap-server
             src/config.h
             src/zcoap-server.c
             src/zcoap-server.h
-            zsnprintf/zsnprintf.c
-            zsnprintf/zsnprintf.h)
+            lib/zsnprintf/zsnprintf.c
+            lib/zsnprintf/zsnprintf.h)
 
 #------------------------------------------------------------------------------
 #Set properties for executable targets based on platform
@@ -49,10 +49,10 @@ IF (WIN32)
 #Example application for win32
 #Just open this CMakeLists.txt file in Visual Studio (ensure you have Linux tools installed for VS as well)
 add_executable(example-server-win32
-               win32-example/platform.h
-               win32-example/server-win32.c
-               win32-example/server-win32-endpoints.c
-               win32-example/server-win32-endpoints.h)
+               examples/win32/platform.h
+               examples/win32/server-win32.c
+               examples/win32/server-win32-endpoints.c
+               examples/win32/server-win32-endpoints.h)
 
 #Link this application against zcoap-server
 target_link_libraries(example-server-win32
@@ -62,14 +62,14 @@ ELSE()
 
 #Example program for Posix platforms
 add_executable(example-server-posix
-               posix-example/platform.h
-               posix-example/server.c
-               posix-example/public.h
-               posix-example/public.c
-               posix-example/private.h
-               posix-example/private.c
-               posix/fs.h
-               posix/fs.c)
+               examples/posix/platform.h
+               examples/posix/server.c
+               examples/posix/public.h
+               examples/posix/public.c
+               examples/posix/private.h
+               examples/posix/private.c
+               examples/posix/fs.h
+               examples/posix/fs.c)
 
 find_package (Threads)
 target_link_libraries(example-server-posix
