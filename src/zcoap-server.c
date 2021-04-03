@@ -966,7 +966,7 @@ static const coap_node_t *get_root(const coap_node_t * const node)
  *
  * @param node URI tree node from which to traverse upward to locate and acquire a lock
  */
-void coap_lock(const coap_node_t *node)
+static void coap_lock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
         node = node->parent;
@@ -981,7 +981,7 @@ void coap_lock(const coap_node_t *node)
  *
  * @param node URI tree node from which to traverse upward to locate and relinquish a lock
  */
-void coap_unlock(const coap_node_t *node)
+static void coap_unlock(const coap_node_t *node)
 {
     while (!node->lock && node->parent) {
         node = node->parent;
@@ -2076,20 +2076,17 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
     }
     coap_node_t root = *node->parent->parent; // locate root at /.well-known/core/../../
     const href_filter_t href_filter = get_href_filter(nopts, opts);
-    coap_lock(node);
     size_t wkn_len = snprintf_wellknown_core(NULL, 0, root, &href_filter);
     size_t pdu_len;
     ZCOAP_ASSERT(compute_rsp_pdu_len(req, NELM(rsp_opts), rsp_opts, wkn_len, &pdu_len) == 0);
     coap_msg_t *rsp = ZCOAP_ALLOCA(pdu_len + 1 /* \0 */);
     if (rsp == NULL) {
-        coap_unlock(node);
         ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: ZCOAP_ALLOCA failed", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
     }
     uint8_t *pl_ptr = populate_rsp_header(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CONTENT), NELM(rsp_opts), rsp_opts, rsp);
     if (pl_ptr == NULL) {
-        coap_unlock(node);
         ZCOAP_ALLOCA_FREE(rsp);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
         return;
@@ -2098,7 +2095,6 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
         *pl_ptr = COAP_PAYLOAD_MARKER;
         ++pl_ptr;
         size_t _wkn_len = snprintf_wellknown_core((char *)pl_ptr, wkn_len + 1, root, &href_filter);
-        coap_unlock(node);
         if (_wkn_len > wkn_len) {
             // oops, wellknown-core changed and is now truncated
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: dynamic tree elements changed while generating .well-known/core", __func__);
@@ -2118,7 +2114,6 @@ static void coap_get_wellknown_core(ZCOAP_METHOD_SIGNATURE)
             --pdu_len;
         }
     } else {
-        coap_unlock(node);
     }
 
     // Transmit the response!
@@ -2527,6 +2522,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
     // calling discard.
     //
     // On failure, return an appropriate error code.
+    coap_lock(node);
     switch (req->msg->code.code_class) {
         case COAP_REQ:
             switch (req->msg->code.code_detail) {
@@ -2534,46 +2530,54 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                     if (node->GET) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing GET for path '%s'", __func__, node->name);
                         (*node->GET)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
-                        return COAP_CODE(COAP_SUCCESS, 0);
+                        rc = COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: GET method unsupported for path '%s'", __func__, node->name);
-                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
+		    break;
                 case COAP_REQ_METHOD_PUT:
                     if (node->PUT) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing PUT for path '%s'", __func__, node->name);
                         (*node->PUT)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
-                        return COAP_CODE(COAP_SUCCESS, 0);
+                        rc = COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: PUT method unsupported for path '%s'", __func__, node->name);
-                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
+		    break;
                 case COAP_REQ_METHOD_POST:
                     if (node->POST) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing POST for path '%s'", __func__, node->name);
                         (*node->POST)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
-                        return COAP_CODE(COAP_SUCCESS, 0);
+                        rc = COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: POST method unsupported for path '%s'", __func__, node->name);
-                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
+		    break;
                 case COAP_REQ_METHOD_DEL:
                     if (node->DEL) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing DEL for path '%s'", __func__, node->name);
                         (*node->DEL)(node, req, nopts, opts, ct, len, payload, NULL, NULL);
-                        return COAP_CODE(COAP_SUCCESS, 0);
+                        rc = COAP_CODE(COAP_SUCCESS, 0);
                     } else {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: DEL method unsupported for path '%s'", __func__, node->name);
-                        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+                        rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
+		    break;
                 default:
-                    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: unable to service method %u for path '%s'", __func__, req->msg->code.code_detail, node->name);
-                    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+                    ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: unable to service method %u for path '%s'", __func__, req->msg->code.code_detail, node->name);
+                    rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
+		    break;
             }
         default:
-            ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: ignoring message with class %u and path option '%s'", __func__, req->msg->code.code_class, node->name);
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: unexpectedly passed message with class %u, path option '%s'", __func__, req->msg->code.code_class, node->name);
+            rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+	    break;
     }
+    coap_unlock(node);
+    return rc;
 }
 
 /**
@@ -5333,7 +5337,6 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         const char *str = (const char *)node->data;
         size_t len = strlen(str);
 
@@ -5352,7 +5355,6 @@ void coap_get_string( ZCOAP_METHOD_SIGNATURE)
         }
 #endif /* __GNUC__ */
         ZCOAP_MEMCPY(buf, str, len + 1);
-        coap_unlock(node);
         coap_printf(req, "%s", buf);
 #ifndef __GNUC__
         ZCOAP_ALLOCA_FREE(buf);
@@ -5378,9 +5380,7 @@ void coap_get_bool(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         bool val = *(volatile bool *)node->data;
-        coap_unlock(node);
         coap_return_bool(req, nopts, opts, val);
     }
 }
@@ -5405,9 +5405,7 @@ void coap_get_u16(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         uint16_t val = *(volatile unsigned *)node->data;
-        coap_unlock(node);
         coap_return_u16(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5432,9 +5430,7 @@ void coap_get_u32(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         uint32_t val = *(volatile uint32_t *)node->data;
-        coap_unlock(node);
         coap_return_u32(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5459,9 +5455,7 @@ void coap_get_u64(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         uint64_t val = *(volatile uint64_t *)node->data;
-        coap_unlock(node);
         coap_return_u64(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5486,9 +5480,7 @@ void coap_get_i16(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         int16_t val = *(volatile int16_t *)node->data;
-        coap_unlock(node);
         coap_return_i16(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5513,9 +5505,7 @@ void coap_get_i32(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         uint32_t val = *(volatile uint32_t *)node->data;
-        coap_unlock(node);
         coap_return_i32(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5540,9 +5530,7 @@ void coap_get_i64(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         int64_t val = *(volatile int64_t *)node->data;
-        coap_unlock(node);
         coap_return_i64(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5567,9 +5555,7 @@ void coap_get_float(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         float val = *(volatile float *)node->data;
-        coap_unlock(node);
         coap_return_float(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5595,9 +5581,7 @@ void coap_get_double(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         ZCOAP_DOUBLE val = *(volatile ZCOAP_DOUBLE *)node->data;
-        coap_unlock(node);
         coap_return_double(req, nopts, opts, node->fmt, val);
     }
 }
@@ -5631,9 +5615,7 @@ void coap_put_bool(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile bool *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5667,9 +5649,7 @@ void coap_put_u16(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile uint16_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5705,9 +5685,7 @@ void coap_put_u32(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile uint32_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5741,9 +5719,7 @@ void coap_put_u64(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile uint64_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5779,9 +5755,7 @@ void coap_put_i16(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile int16_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5815,9 +5789,7 @@ void coap_put_i32(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile int32_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5851,9 +5823,7 @@ void coap_put_i64(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile int64_t *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5886,9 +5856,7 @@ void coap_put_float(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile float *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }
@@ -5921,9 +5889,7 @@ void coap_put_double(ZCOAP_METHOD_SIGNATURE)
         ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
         coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL));
     } else {
-        coap_lock(node);
         *(volatile ZCOAP_DOUBLE *)(node->data) = val;
-        coap_unlock(node);
         coap_status_rsp(req, COAP_CODE(COAP_SUCCESS, COAP_SUCCESS_CHANGED));
     }
 }

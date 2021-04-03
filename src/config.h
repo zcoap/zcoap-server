@@ -158,13 +158,10 @@
  * and management of our observable subscription tables.  An implementation may
  * define these locking primitives for thread-safe operation.  Else, they are
  * no-ops.
- *
- * Note that only library getters and setters call the locks by default.
- * Implementation-defined method functions must also call the lock macros or
- * otherwise manage synchronization on their own.
  */
 #define ZCOAP_LOCK(void){}
 #define ZCOAP_UNLOCK(void){}
+typedef struct coap_lock_s {} coap_lock_t;
 #endif /* ZCOAP_LOCK */
 
 #ifndef ZCOAP_DOUBLE

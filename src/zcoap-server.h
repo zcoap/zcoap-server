@@ -798,12 +798,13 @@ struct coap_node_s {
      * lock
      *
      * Lock to protect nodes in multithreaded environments.  The server walks
-     * the tree from node to root and acquires the first non-NULL lock.  This
-     * allows for cunstruction of trees with sparse population of locks.  For
-     * instance, perhaps all nodes at and below /telementry should share a
-     * single lock.  If so, a single lock can be added to /telemetry and this
-     * will provide protection for it and all of its children.  The simplest
-     * implementation places a single lock at the tree root node.
+     * the tree from node to root and acquires the first non-NULL lock when
+     * dispatching method handlers.  This allows for cunstruction of trees with
+     * sparse population of locks.  For instance, perhaps all nodes at and below
+     * /telementry should share a single lock.  If so, a single lock can be
+     * added to /telemetry and this will provide protection for it and all of
+     * its children.  The simplest implementation places a single lock at the
+     * tree root node.
      */
     coap_lock_t *lock;
     /**
@@ -943,8 +944,6 @@ extern void coap_publish_all(coap_sub_map_t *map); // publish an update to all o
 extern void coap_cancel(coap_node_t *node); // cancel all subscriptions for the passed node
 extern void coap_cancel_all(coap_sub_map_t *map); // cancel all observer subscriptions
 extern void coap_garbage_collect(coap_sub_map_t *map); // garbage collect observer subscriptions
-extern void coap_lock(const coap_node_t *node);
-extern void coap_unlock(const coap_node_t *node);
 
 extern void coap_ack(coap_req_data_t* req);
 extern void coap_rsp(coap_req_data_t* req, coap_code_t code, size_t nopts, const coap_opt_t opts[], size_t pl_len, const void* payload);
