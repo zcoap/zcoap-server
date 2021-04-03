@@ -2535,7 +2535,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: GET method unsupported for path '%s'", __func__, node->name);
                         rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
-		    break;
+                    break;
                 case COAP_REQ_METHOD_PUT:
                     if (node->PUT) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing PUT for path '%s'", __func__, node->name);
@@ -2545,7 +2545,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: PUT method unsupported for path '%s'", __func__, node->name);
                         rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
-		    break;
+                    break;
                 case COAP_REQ_METHOD_POST:
                     if (node->POST) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing POST for path '%s'", __func__, node->name);
@@ -2555,7 +2555,7 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: POST method unsupported for path '%s'", __func__, node->name);
                         rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
-		    break;
+                    break;
                 case COAP_REQ_METHOD_DEL:
                     if (node->DEL) {
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: servicing DEL for path '%s'", __func__, node->name);
@@ -2565,16 +2565,16 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_o
                         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: DEL method unsupported for path '%s'", __func__, node->name);
                         rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
                     }
-		    break;
+                    break;
                 default:
                     ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: unable to service method %u for path '%s'", __func__, req->msg->code.code_detail, node->name);
                     rc = COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_METHOD_NOT_ALLOWED);
-		    break;
+                    break;
             }
         default:
             ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: unexpectedly passed message with class %u, path option '%s'", __func__, req->msg->code.code_class, node->name);
             rc = COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-	    break;
+            break;
     }
     coap_unlock(node);
     return rc;
