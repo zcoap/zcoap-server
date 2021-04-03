@@ -991,6 +991,43 @@ static void coap_unlock(const coap_node_t *node)
     }
 }
 
+/*********** Begin RFC7959 blockwise transfer utility functions. ************/
+
+/**
+ * Write an appropriately formatted block option with value pointing to the
+ * ence number.  Reorder sequence for big-endian transmission.
+ *
+ * @param seq (in, out) sequence number to convert to big-endian and enclose in the option structure
+ * @param opt (out) option structure to write into
+ */
+static void
+#ifdef __GNUC__
+__attribute__((nonnull (5, 6)))
+#endif
+build_block_option(const coap_opt_num_t num, const coap_block_szx_t szx, const bool more, const coap_block_idx_t idx, coap_block_buf_t * const val, coap_opt_t * const opt)
+{
+    ZCOAP_ASSERT(   (num == COAP_OPT_BLOCK1 || num == COAP_OPT_BLOCK2)
+                 && szx <= COAP_BLOCK_SZX_MAX
+		 && idx <= COAP_BLOCK_INDEX_MAX
+		 && val != NULL
+		 && opt != NULL);
+    const unsigned shift  = szx + COAP_BLOCK_SZX_SHIFT_MIN;
+    const coap_block_idx_t mask = (1 << shift) - 1;
+    ZCOAP_ASSERT((idx & mask) == 0);
+    *val = idx >> shift;
+    opt->num = num;
+    opt->len = *val <= 0xF ? 1 : * val <= 0xFFF ? 2 : 3;
+    *val <<= COAP_BLOCK_SZX_BITS + COAP_BLOCK_M_BITS;
+    *val |= szx;
+    *val |= more ? 1U << COAP_BLOCK_SZX_BITS : 0;
+    *val = ZCOAP_HTONL(*val);
+    opt->val = (uint8_t *)val + (sizeof(*val) - opt->len);
+}
+
+
+
+/*********** End RFC7959 blockwise transfer utility functions. ************/
+
 /*********** Begin RFC7641 observation request utility functions. ************/
 
 /**

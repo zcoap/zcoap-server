@@ -47,6 +47,7 @@ enum {
     COAP_SUCCESS_VALID = 3,
     COAP_SUCCESS_CHANGED = 4,
     COAP_SUCCESS_CONTENT = 5,
+    COAP_SUCCESS_CONTINUE = 31,
 };
 
 enum {
@@ -57,6 +58,7 @@ enum {
     COAP_CLIENT_ERR_NOT_FOUND = 4,
     COAP_CLIENT_ERR_METHOD_NOT_ALLOWED = 5,
     COAP_CLIENT_ERR_NO_ACCEPT = 6,
+    COAP_CLIENT_ERR_REQ_INCOMPLETE = 8,
     COAP_CLIENT_ERR_PRECOND_FAILED = 12,
     COAP_CLIENT_ERR_REQ_TOO_LARGE = 13,
     COAP_CLIENT_ERR_CONTENT_FMT = 15,
@@ -93,6 +95,9 @@ enum {
     COAP_OPT_URI_QUERY = 15,
     COAP_OPT_ACCEPT = 17,
     COAP_OPT_LOCATION_QUERY = 20,
+    COAP_OPT_BLOCK2 = 23,
+    COAP_OPT_BLOCK1 = 27,
+    COAP_OPT_SIZE2 = 28,
     COAP_OPT_PROXY_URI = 35,
     COAP_OPT_PROXY_SCHEME = 39,
     COAP_OPT_SIZE1 = 60,
@@ -162,6 +167,7 @@ typedef enum coap_content_format_e {
 } coap_content_format_t;
 
 typedef uint16_t coap_ct_t;
+typedef uint32_t coap_size_t;
 extern void count_ct(size_t *count, ...);
 extern void extract_ct(coap_ct_t *ct, ...);
 
@@ -530,6 +536,34 @@ typedef struct coap_sub_map_s {
 } coap_sub_map_t;
 
 // End RFC 7641 Observable structures
+
+// RFC 7959 Block-Wise Transfers
+
+#define COAP_BLOCK_SZX_BITS 3
+#define COAP_BLOCK_M_BITS 1
+#define COAP_BLOCK_NUM_BITS 20
+#define COAP_BLOCK_OPT_BITS ((COAP_BLOCK_SZX_BITS) + (COAP_BLOCK_M_BITS) + (COAP_BLOCK_NUM_BITS))
+#define COAP_BLOCK_OPT_BYTES ((COAP_BLOCK_OPT_BITS >> 3 ))
+#define COAP_BLOCK_SZX_MAX ((1U << (COAP_BLOCK_SZX_BITS)) - 1)
+#define COAP_BLOCK_SZX_SHIFT_MIN 4
+#define COAP_BLOCK_SZX_SHIFT_MAX ((COAP_BLOCK_SZX_SHIFT_MIN) + (COAP_BLOCK_SZX_MAX))
+#define COAP_BLOCK_INDEX_BITS ((COAP_BLOCK_NUM_BITS) + (COAP_BLOCK_SZX_SHIFT_MAX))
+#define COAP_BLOCK_INDEX_MAX ((1UL << (COAP_BLOCK_INDEX_BITS)) - 1)
+
+typedef uint8_t coap_block_buf_t[COAP_BLOCK_OPT_BYTES];
+typedef uint8_t coap_block_szx_t;
+typedef uint32_t coap_block_idx_t;
+typedef uint32_t coap_block_num_t;
+typedef struct coap_block_s {
+    coap_block_index_t index : COAP_BLOCK_INDEX_BITS;
+    bool more;
+} coap_block_t;
+
+typedef coap_block_trasfer_s {
+        
+} coap_block_transfer_t;
+
+// End RFC 7959 Block-Wise Transfer structures
 
 /**
  * coap_req_data_t
@@ -910,6 +944,14 @@ struct coap_node_s {
      */
     bool observable : 1;
     /**
+     *
+     * stateless_blocks
+     *
+     * If true, do not maintain state for block-wise transfers in zcoap-server.
+     * Instead, hand block-wise requests directly to handlers.
+     */
+    bool stateless_blocks : 1;
+    /**
      * singleton
      *
      * Private zcoap-server field.  If true, this node is a singleton in the
@@ -938,7 +980,12 @@ typedef uint8_t zcoap_bool_t;
 extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
 extern coap_code_t coap_get_content_fmt_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
 extern coap_code_t coap_get_accept_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
-extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, uint32_t* size1);
+extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size1);
+extern coap_code_t coap_get_size2(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size2);
+extern coap_code_t coap_get_sizex(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size);
+extern coap_code_t coap_get_block1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block1);
+extern coap_code_t coap_get_block2(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block2);
+extern coap_code_t coap_get_blockx(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block);
 extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
 extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
