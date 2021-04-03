@@ -335,7 +335,7 @@ int main(int argc, char *argv[])
     // operating a thread pool and wished to reduce tree-to-tree contention,
     // we could instead establish a subscription map for each tree.
     for (size_t i = 0; i < NELM(servers); ++i) {
-        servers[i].root.tsubs = &subs;
+        servers[i].root.smap = &subs;
     }
 
     // Always initialize the CoAP URI trees before use.  Initialization sorts

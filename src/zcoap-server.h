@@ -773,26 +773,27 @@ struct coap_node_s {
     /**
      * seq
      *
-     * Observable node sequence nunmber, embedded in updates to subscribers.
+     * Observable node sequence nunmber.  Populated by zcoap-server and
+     * embedded in updates to subscribers.
      */
-    coap_obs_seq_t seq : COAP_OBS_SEQ_BITS; // observation sequence number
+    coap_obs_seq_t seq : COAP_OBS_SEQ_BITS;
     union {
         /**
-         * nsubs
+         * subs
          *
-         * Observable node subscriptions linked-list.
+         * Observable node subscriptions linked-list, populated by zcoap-server.
          *
          * Because this is shared with tsubs in an anonymous union which also
          * contains the root node subscription map, it is impermissible for the
          * root node to be observable.
          */
-        coap_sub_t *nsubs;
+        coap_sub_t *subs;
         /**
-         * tsubs
+         * smap
          *
          * Root node map of subscriptions for the tree.
          */
-        coap_sub_map_t *tsubs;
+        coap_sub_map_t *smap;
     };
     /**
      * lock
@@ -820,6 +821,13 @@ struct coap_node_s {
      */
     volatile void *data;
     /**
+     * metadata
+     *
+     * Node metadata.  Can be anything as necessary for a node's handler's to
+     * understand their context.
+     */
+    const void *metadata;
+    /**
      * fmt
      *
      * Node printf format for plain text responses.  If NULL, a default is used
@@ -829,8 +837,8 @@ struct coap_node_s {
     /**
      * parent
      *
-     * Parent node pointer, populated by the server at runtime.  May be used by
-     * method handlers to locate parents or root.
+     * Parent node pointer, populated by zcoap-server at runtime.  May be used
+     * by method handlers to locate parents or root.
      */
     const coap_node_t *parent;
     /**
@@ -890,25 +898,11 @@ struct coap_node_s {
      */
     coap_validate_t validate;
     /**
-     * metadata
-     *
-     * Node metadata.  Can be anything as necessary for a node's handler's to
-     * understand their context.
-     */
-    const void *metadata;
-    /**
      * hidden
      *
      * If true, do not advertise in .well-known/core
      */
     bool hidden : 1;
-    /**
-     * singleton
-     *
-     * If true, this node is a singleton in the tree and can support
-     * subscriptions.  This is set automatically by zcoap-server.
-     */
-    bool singleton : 1;
     /**
      * observable
      *
@@ -916,10 +910,17 @@ struct coap_node_s {
      */
     bool observable : 1;
     /**
+     * singleton
+     *
+     * Private zcoap-server field.  If true, this node is a singleton in the
+     * tree and can support subscriptions.
+     */
+    bool singleton : 1;
+    /**
      * instance
      *
-     * State flag to ensure we only increment seq once per update of a given
-     * observable.
+     * Private zcoap-server field used to ensure we only increment seq once per
+     * update of a given observable.
      */
     bool instance : 1;
 };

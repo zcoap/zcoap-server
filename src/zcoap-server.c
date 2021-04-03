@@ -1274,7 +1274,7 @@ extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
  */
 static coap_sub_map_t *get_sub_map(const coap_node_t *node)
 {
-    return get_root(node)->tsubs;
+    return get_root(node)->smap;
 }
 
 /**
@@ -1363,12 +1363,12 @@ static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coa
         qsort(map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: added subscription=%p for token 0x%" PRIx64, __func__, subscription, subscription->token);
     }
-    if (node->nsubs) {
-        node->nsubs->pnext = &subscription->next;
+    if (node->subs) {
+        node->subs->pnext = &subscription->next;
     }
-    subscription->next = node->nsubs; // O(1) insertion at beginning of subscription list
-    subscription->pnext = &node->nsubs;
-    node->nsubs = subscription;
+    subscription->next = node->subs; // O(1) insertion at beginning of subscription list
+    subscription->pnext = &node->subs;
+    node->subs = subscription;
     subscription->ct = ct;
     req->state.obs = true;
     req->state.seq = node->seq;
@@ -1563,7 +1563,7 @@ __attribute__((nonnull (1, 2)))
 coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(ack != NULL && root != NULL);
-    coap_sub_map_t * const map = root->tsubs;
+    coap_sub_map_t * const map = get_sub_map(root);
     ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
     if (map == NULL || map->endpoint_cmp == NULL) {
         coap_discard(ack);
@@ -1598,7 +1598,7 @@ __attribute__((nonnull (1, 2)))
 coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(reset != NULL && root != NULL);
-    coap_sub_map_t * const map = root->tsubs;
+    coap_sub_map_t * const map = get_sub_map(root);
     ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
     if (map == NULL || map->endpoint_cmp == NULL) {
         coap_discard(reset);
@@ -1690,7 +1690,7 @@ void coap_publish(coap_node_t * const node)
     coap_sub_map_t *map = get_sub_map(node);
     ZCOAP_ASSERT(node->singleton && map != NULL);
     ZCOAP_LOCK(&map->lock);
-    coap_sub_t *sub = node->nsubs;
+    coap_sub_t *sub = node->subs;
     while (sub) {
         if (window_full(sub->window_left, sub->window_right)) {
             ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: window wrap for subscription with token 0x%" PRIx64 " (left=0x%04X, right=0x%04X)",
@@ -1798,7 +1798,7 @@ static void _coap_cancel(coap_node_t * const node, coap_code_t code)
     ZCOAP_ASSERT(map != NULL);
     ZCOAP_LOCK(&map->lock);
     coap_sub_t *sub;
-    while ((sub = node->nsubs)) {
+    while ((sub = node->subs)) {
         if (code) {
             coap_notify(sub, code);
         }
