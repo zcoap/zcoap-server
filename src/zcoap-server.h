@@ -278,7 +278,7 @@ typedef void __attribute__((nonnull (1))) (*coap_responder_t)(coap_req_data_t * 
 typedef void (*coap_responder_t)(coap_req_data_t * const req, const size_t len, const coap_msg_t* rsp);
 #endif
 
-// RFC 7651 Observables
+// RFC 7641 Observables
 
 #if INT_MAX == INT16_MAX
 #define ZCOAP_WORD_ALIGN_SHIFT 1
@@ -529,7 +529,7 @@ typedef struct coap_sub_map_s {
     coap_endpoint_cmp_t endpoint_cmp;
 } coap_sub_map_t;
 
-// End RFC 7651 Observable structures
+// End RFC 7641 Observable structures
 
 /**
  * coap_req_data_t
