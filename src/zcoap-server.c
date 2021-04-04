@@ -1715,6 +1715,69 @@ build_block_option(const coap_opt_num_t num, coap_block_opt_t block, coap_block_
     return 0;
 }
 
+/**
+ * Determine whether a potential block1 request can be handled in a stateless
+ * fashion by the given node.  If so, we may simply hand the request to the
+ * node's handlers for prodcessing.
+ *
+ * @param req CoAP request to process
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or NULL if unavailable to the caller
+ * @param node server tree node matching request URI
+ * @return 0 if the node can handle the request, 4.08 if stateful caching is required
+ */
+static coap_code_t validate_stateless_block1(coap_req_data_t* const req, const size_t nopts, const coap_opt_t opts[], coap_node_t* const node)
+{
+    bool found = false;
+    coap_block_opt_t block1 = { 0 };
+    coap_code_t rc;
+    if ((rc = coap_get_block1(req, nopts, opts, &found, &block1))) {
+        return rc;
+    }
+    if (!found) {
+        return 0;
+    }
+    if (!node->stateless_blocks) {
+        // This node does not support stateless block transfers.
+	return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_INCOMPLETE);
+    }
+    return 0;
+}
+
+/**
+ * Determine whether a potential block2 request can be handled in a stateless
+ * fashion by the given node.  If so, we may simply hand the request to the
+ * node's handlers for prodcessing.
+ *
+ * @param req CoAP request to process
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or NULL if unavailable to the caller
+ * @param node server tree node matching request URI
+ * @return 0 if the node can handle the request, 4.08 if stateful caching is required
+ */
+static coap_code_t validate_stateless_block2(coap_req_data_t* const req, const size_t nopts, const coap_opt_t opts[], coap_node_t* const node)
+{
+    bool found = false;
+    coap_block_opt_t block2 = { 0 };
+    coap_code_t rc;
+    if ((rc = coap_get_block2(req, nopts, opts, &found, &block2))) {
+        return rc;
+    }
+    if (!found) {
+        return 0;
+    }
+    if (block2.idx == 0) {
+        // If this is the beginning of a block2 transfer, coap_rsp can act
+	// as necessary, establishing a stateful transfer if necessary.
+        return 0;
+    }
+    if (!node->stateless_blocks) {
+        // This node does not support stateless block transfers.
+	return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_INCOMPLETE);
+    }
+    return 0;
+}
+
 /*********** End RFC7959 blockwise transfer utility functions. ************/
 
 /*********** Begin RFC7641 observation request utility functions. ************/
@@ -2950,6 +3013,12 @@ process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_opt_t
     const void *payload;
     EXTRACT_CONTENT_TYPE_AND_PAYLOAD(req);
     coap_code_t rc;
+    if ((rc = validate_stateless_block1(req, nopts, opts, node))) {
+        return rc;
+    }
+    if ((rc = validate_stateless_block2(req, nopts, opts, node))) {
+        return rc;
+    }
     if ((rc = process_observe_req(node, req, nopts, opts, ct))) {
         return rc;
     }
