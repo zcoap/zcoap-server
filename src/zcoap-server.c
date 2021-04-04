@@ -2173,7 +2173,7 @@ alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t
  * the subscriber's subscription map is empty, free the subscriber's endpoint
  * information and remove the subscriber from the top-level subscription map.
  *
- * Caller's must hold the map's lock.
+ * Callers must hold the top-level map lock.
  *
  * @param map susbscription map
  * @param sub subscription to free from its subscriber's map
@@ -2351,11 +2351,26 @@ static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coa
     return 0;
 }
 
-static void rm_idmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
+/**
+ * Remove the passed subscription from the endpoint:id map.  If the passed
+ * subscription pointer is in the map, we can trivially compute its index.  If
+ * it is not, we will bsearch to find it.
+ *
+ * Callers must hold the top-level map lock.  This function does NOT update
+ * n_subscriptions.
+ *
+ * @param map map from which to remove the subscription
+ * @param sub subscription to remove
+ */
+static void
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2)))
+#endif
+rm_idmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
 {
-    ZCOAP_ASSERT(map->subidmap != NULL && map->n_subscriptions >= 1);
+    ZCOAP_ASSERT(map != NULL && map->subidmap != NULL && map->n_subscriptions >= 1 && sub != NULL);
     coap_sub_t **match;
-    if (sub >= map->subidmap && sub < &map->subidmap[map->n_subscriptions]) {
+    if (sub >= map->subidmap && sub <= &map->subidmap[map->n_subscriptions - 1]) {
         match = sub;
     } else {
         match = bsearch(sub, map->subidmap, map->n_subscriptions, sizeof(map->subidmap[0]), &sub_id_cmp);
@@ -2371,11 +2386,26 @@ static void rm_idmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
     map->subidmap = resized_ids ? resized_ids : map->subidmap;
 }
 
-static void rm_tokmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
+/**
+ * Remove the passed subscription from the endpoint:token map.  If the passed
+ * subscription pointer is in the map, we can trivially compute its index.  If
+ * it is not, we will bsearch to find it.
+ *
+ * Callers must hold the top-level map lock.  This function does NOT update
+ * n_subscriptions.
+ *
+ * @param map map from which to remove the subscription
+ * @param sub subscription to remove
+ */
+static void
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2)))
+#endif
+rm_tokmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
 {
-    ZCOAP_ASSERT(map->subtokmap != NULL && map->n_subscriptions >= 1);
+    ZCOAP_ASSERT(map != NULL && map->subtokmap != NULL && map->n_subscriptions >= 1 && sub != NULL);
     coap_sub_t **match;
-    if (sub >= map->subtokmap && sub < &map->subtokmap[map->n_subscriptions]) {
+    if (sub >= map->subtokmap && sub <= &map->subtokmap[map->n_subscriptions - 1]) {
         match = sub;
     } else {
         match = bsearch(sub, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp);
@@ -2392,9 +2422,10 @@ static void rm_tokmap_entry(coap_sub_map_t *map, coap_sub_t **sub)
 }
 
 /**
- * Free the passed subscription and remove it from the passed subscription
- * map.  If after removal the any members of the map are empty, free these
- * as well.
+ * Free the passed subscription and remove it from the top-level subscription
+ * map.  If after removal any members of the map are empty, free these as well.
+ *
+ * Callers must hold the top-level map lock.
  *
  * @param map subscirption map
  * @param sub subscription to free
@@ -2591,99 +2622,6 @@ coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
     coap_discard(ack);
 }
 
-void coap_cancel_subscriber(coap_sub_map_t *map, coap_endpoint_t *endpoint)
-{
-    ZCOAP_ASSERT(map != NULL && endpoint != NULL);
-    coap_subscriber_t subscriber = { .endpoint = endpoint };
-    coap_sub_t needle = { .subscriber = &subscriber };
-    coap_sub_t *key = &needle;
-    // Find an occurrence of the endpoint.
-    ZCOAP_LOCK(&map->lock);
-    coap_sub_t **match = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_tok_cmp) : NULL;
-    if (match == NULL) {
-        ZCOAP_UNLOCK(&map->lock);
-	return;
-    }
-    // Now find the first.
-    coap_sub_t **first = match;
-    while (1) {
-        if (coap_endpoint_cmp(endpoint, (*first)->subscriber->endpoint)) {
-	    ++first;
-	    break;
-	}
-        if (first == map->subtokmap) {
-	    break;
-	}
-	--first;
-    }
-    // Find the last.
-    coap_sub_t **last = match;
-    while (1) {
-        if (coap_endpoint_cmp(endpoint, (*last)->subscriber->endpoint)) {
-	    --last;
-	    break;
-	}
-	if (last == map->subtokmap + map->n_subscriptions - 1) {
-	    break;
-	}
-	++last;
-    }
-    // Disconnect subscriptions from all nodes.
-    coap_sub_t **cur = first;
-    for (coap_sub_t **cur = first; cur <= last; ++cur) {
-        ZCOAP_ASSERT((*cur)->pnext != NULL);
-        *(*cur)->pnext = (*cur)->next;
-	if ((*cur)->next) {
-	    (*cur)->next->pnext = (*cur)->pnext;
-	}
-    }
-    // Count the number of subscriptions for this endpoint, locate first index.
-    size_t cnt = last - first + 1;
-    size_t idx = first - map->subtokmap;
-    size_t remain = map->n_subscribers - idx - cnt;
-    // Decrement subscription count.
-    map->n_subscriptions -= cnt;
-    map->n_subscribers -= 1;
-    if (map->n_subscriptions) {
-	// Locate and remove subscriber.
-	{
-            coap_subscriber_t *key = (*first)->subscriber;
-	    ZCOAP_ASSERT(map->subscribers && map->n_subscribers);
-            coap_subscriber_t **subscriber = bsearch(&key, map->subscribers, map->n_subscribers, sizeof(map->subscribers[0]), &sub_map_cmp);
-            size_t subscriber_idx = subscriber - map->subscribers;
-            const size_t subscriber_remain = map->n_subscribers - idx;
-            ZCOAP_MEMMOVE(subscriber, subscriber + 1, remain * sizeof(*subscriber));
-            // We do not expect ZCOAP_REALLOC to fail on shrink.
-            // But if it does, we will simply retain the old buffer.
-            coap_subscriber_t **resized_subscribers = ZCOAP_REALLOC(map->subscribers, sizeof(map->subscribers[0]) * (map->n_subscribers));
-            map->subscribers = resized_subscribers ? resized_subscribers : map->subscribers;
-	}
-        // Remove entries from or subscription token and ID maps.  Observe that
-	// because endpoint is our primary key, index ranges for the ID and
-	// token maps are the same.
-        coap_sub_t **tokaddr = &map->subtokmap[idx];
-	coap_sub_t **idaddr = &map->subidmap[idx];
-        ZCOAP_MEMMOVE(tokaddr, tokaddr + cnt, remain * sizeof(*tokaddr));
-        ZCOAP_MEMMOVE(idaddr, idaddr + cnt, remain * sizeof(*idaddr));
-        // We do not expect ZCOAP_REALLOC to fail on shrink.
-        // But if it does, we will simply retain the old buffer.
-        coap_sub_t **resized_toks = ZCOAP_REALLOC(map->subtokmap, sizeof(map->subtokmap[0]) * (map->n_subscriptions - 1));
-        map->subtokmap = resized_toks ? resized_toks : map->subtokmap;
-        coap_sub_t **resized_ids = ZCOAP_REALLOC(map->subidmap, sizeof(map->subidmap[0]) * (map->n_subscriptions - 1));
-        map->subidmap = resized_ids ? resized_ids : map->subidmap;
-    } else {
-        // All subscriptions are being removed.  Free all maps.
-        ZCOAP_ASSERT(map->n_subscribers == 0);
-        ZCOAP_FREE(map->subtokmap);
-        map->subtokmap = NULL;
-        ZCOAP_FREE(map->subidmap);
-        map->subidmap = NULL;
-        ZCOAP_FREE(map->subscribers);
-        map->subscribers = NULL;
-    }
-    ZCOAP_UNLOCK(&map->lock);
-}
-
 /**
  * Handle an incoming RESET.  For us, resets are only relevant for tracking
  * observable resources.  If we see a RESET from any endpoints for existing
@@ -2704,7 +2642,7 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
         coap_discard(reset);
         return;
     }
-    coap_cancel_subscriber(map, reset->endpoint);
+    coap_remove_subscriber(map, reset->endpoint);
     coap_discard(reset);
 }
 
@@ -2918,6 +2856,106 @@ void coap_cancel_all(coap_sub_map_t * const map)
         ZCOAP_LOG(ZCOAP_LOG_INFO, "%s: canceling subscription=%p, token 0x%" PRIx64 " for subscriber=%p", __func__, (*sub), (*sub)->token, (*sub)->subscriber);
         coap_notify(*sub, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_SERVICE_UNAVAIL));
         free_subscription(map, sub);
+    }
+    ZCOAP_UNLOCK(&map->lock);
+}
+
+/**
+ * Cancel all subscriptions for the passed subscriber.
+ *
+ * @param map subscription map from which to remove subscriptions
+ * @param endpoint subscriber endpoint for which to remove subscriptions.
+ */
+void coap_remove_subscriber(coap_sub_map_t *map, coap_endpoint_t *endpoint)
+{
+    ZCOAP_ASSERT(map != NULL && endpoint != NULL);
+    coap_subscriber_t subscriber = { .endpoint = endpoint };
+    coap_sub_t needle = { .subscriber = &subscriber };
+    coap_sub_t *key = &needle;
+    // Find an occurrence of the endpoint.
+    ZCOAP_LOCK(&map->lock);
+    coap_sub_t **match = map->subtokmap ? bsearch(&key, map->subtokmap, map->n_subscriptions, sizeof(map->subtokmap[0]), &sub_endpoint_cmp) : NULL;
+    if (match == NULL) {
+        ZCOAP_UNLOCK(&map->lock);
+	return;
+    }
+    // Now find the first.
+    coap_sub_t **first = match;
+    while (1) {
+        if (first == map->subtokmap) {
+	    break;
+	}
+	--first;
+        if (coap_endpoint_cmp(endpoint, (*first)->subscriber->endpoint)) {
+	    ++first;
+	    break;
+	}
+    }
+    // Find the last.
+    coap_sub_t **last = match;
+    while (1) {
+	if (last == map->subtokmap + map->n_subscriptions - 1) {
+	    break;
+	}
+	++last;
+        if (coap_endpoint_cmp(endpoint, (*last)->subscriber->endpoint)) {
+	    --last;
+	    break;
+	}
+    }
+    // Disconnect subscriptions from all nodes.
+    coap_sub_t **cur = first;
+    for (coap_sub_t **cur = first; cur <= last; ++cur) {
+        ZCOAP_ASSERT((*cur)->pnext != NULL);
+        *(*cur)->pnext = (*cur)->next;
+	if ((*cur)->next) {
+	    (*cur)->next->pnext = (*cur)->pnext;
+	}
+    }
+    // Count the number of subscriptions for this endpoint, locate first index.
+    size_t cnt = last - first + 1;
+    size_t idx = first - map->subtokmap;
+    size_t remain = map->n_subscribers - idx - cnt;
+    // Decrement subscription count.
+    map->n_subscriptions -= cnt;
+    map->n_subscribers -= 1;
+    if (map->n_subscriptions) {
+	// Locate and remove subscriber.
+	ZCOAP_ASSERT(map->subscribers && map->n_subscribers);
+	{
+            coap_subscriber_t *key = (*first)->subscriber;
+            coap_subscriber_t **subscriber = bsearch(&key, map->subscribers, map->n_subscribers, sizeof(map->subscribers[0]), &sub_map_cmp);
+	    ZCOAP_ASSERT(subscriber);
+            size_t subscriber_idx = subscriber - map->subscribers;
+            const size_t subscriber_remain = map->n_subscribers - idx;
+            ZCOAP_MEMMOVE(subscriber, subscriber + 1, remain * sizeof(*subscriber));
+            // We do not expect ZCOAP_REALLOC to fail on shrink.
+            // But if it does, we will simply retain the old buffer.
+            coap_subscriber_t **resized_subscribers = ZCOAP_REALLOC(map->subscribers, sizeof(map->subscribers[0]) * (map->n_subscribers));
+            map->subscribers = resized_subscribers ? resized_subscribers : map->subscribers;
+	}
+        // Remove entries from or subscription token and ID maps.  Observe that
+	// because endpoint is our primary key, index ranges for the ID and
+	// token maps are the same.
+        coap_sub_t **tokaddr = &map->subtokmap[idx];
+	coap_sub_t **idaddr = &map->subidmap[idx];
+        ZCOAP_MEMMOVE(tokaddr, tokaddr + cnt, remain * sizeof(*tokaddr));
+        ZCOAP_MEMMOVE(idaddr, idaddr + cnt, remain * sizeof(*idaddr));
+        // We do not expect ZCOAP_REALLOC to fail on shrink.
+        // But if it does, we will simply retain the old buffer.
+        coap_sub_t **resized_toks = ZCOAP_REALLOC(map->subtokmap, sizeof(map->subtokmap[0]) * (map->n_subscriptions - 1));
+        map->subtokmap = resized_toks ? resized_toks : map->subtokmap;
+        coap_sub_t **resized_ids = ZCOAP_REALLOC(map->subidmap, sizeof(map->subidmap[0]) * (map->n_subscriptions - 1));
+        map->subidmap = resized_ids ? resized_ids : map->subidmap;
+    } else {
+        // All subscriptions are being removed.  Free all maps.
+        ZCOAP_ASSERT(map->n_subscribers == 0);
+        ZCOAP_FREE(map->subtokmap);
+        map->subtokmap = NULL;
+        ZCOAP_FREE(map->subidmap);
+        map->subidmap = NULL;
+        ZCOAP_FREE(map->subscribers);
+        map->subscribers = NULL;
     }
     ZCOAP_UNLOCK(&map->lock);
 }
