@@ -12,7 +12,6 @@
 
 #include <netinet/in.h>
 #include <pthread.h>
-typedef struct sockaddr_in coap_endpoint_t;
 
 #define ZCOAP_MAX_BUF_SIZE 256 /* from default 64 to support our fs max filename segment, 255 bytes */
 #define ZCOAP_MAX_PAYLOAD_OPTS 64 /* library has 32 as default, but we have lots of memory */
@@ -22,6 +21,14 @@ typedef struct sockaddr_in coap_endpoint_t;
 // Give us big NSTART and drop thresholds.
 #define ZCOAP_SUB_NSTART_BITS 8
 #define ZCOAP_SUB_DROP_THRESH 100
+
+
+typedef union coap_endpoint_s {
+    struct sockaddr sa;
+    struct sockaddr_in s4;
+    struct sockaddr_in6 s6;
+    struct sockaddr_storage ss;
+} coap_endpoint_t;
 
 /*
  * We are multithreaded.  Give the zcoap server some locking primitives.

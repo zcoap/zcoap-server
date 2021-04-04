@@ -1737,8 +1737,8 @@ static coap_code_t validate_stateless_block1(coap_req_data_t* const req, const s
     if (!found) {
         return 0;
     }
-    if (!node->stateless_blocks) {
-        // This node does not support stateless block transfers.
+    if (!node->block) {
+        // This node cannot support block transfers on its own.
 	return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_INCOMPLETE);
     }
     return 0;
@@ -1755,7 +1755,7 @@ static coap_code_t validate_stateless_block1(coap_req_data_t* const req, const s
  * @param node server tree node matching request URI
  * @return 0 if the node can handle the request, 4.08 if stateful caching is required
  */
-static coap_code_t validate_stateless_block2(coap_req_data_t* const req, const size_t nopts, const coap_opt_t opts[], coap_node_t* const node)
+static coap_code_t validate_stateless_block2(coap_req_data_t *const req, const size_t nopts, const coap_opt_t opts[], coap_node_t * const node)
 {
     bool found = false;
     coap_block_opt_t block2 = { 0 };
@@ -1767,15 +1767,134 @@ static coap_code_t validate_stateless_block2(coap_req_data_t* const req, const s
         return 0;
     }
     if (block2.idx == 0) {
-        // If this is the beginning of a block2 transfer, coap_rsp can act
-	// as necessary, establishing a stateful transfer if necessary.
+        // If this is the beginning of a block2 transfer, coap_rsp can
+	// establish a stateful transfer if necessary.
         return 0;
     }
-    if (!node->stateless_blocks) {
-        // This node does not support stateless block transfers.
+    if (!node->block) {
+        // This node cannot support block transfers on its own.
 	return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_REQ_INCOMPLETE);
     }
     return 0;
+}
+
+static void free_cache_tree(coap_cache_tree_t *tree)
+{
+    if (tree->nodes) {
+        ZCOAP_FREE(tree->nodes);
+    }
+    if (tree->children) {
+        ZCOAP_FREE(tree->children);
+    }
+    if (tree->path) {
+        ZCOAP_FREE(tree->path);
+    }
+    ZCOAP_FREE(tree);
+}
+
+static void coap_block1_put(ZCOAP_METHOD_SIGNATURE)
+{
+    ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
+}
+
+/**
+ * Allocate a sparse cache tree for the passed node.
+ */
+static coap_cache_tree_t *alloc_cache_tree(const coap_node_t * const node, unsigned method, coap_handler_t handler)
+{
+    ZCOAP_ASSERT(   method == COAP_REQ_METHOD_GET
+                 || method == COAP_REQ_METHOD_PUT
+		 || method == COAP_REQ_METHOD_POST
+		 || method == COAP_REQ_METHOD_DEL);
+    // Allocate top-level tree structure.
+    coap_cache_tree_t *tree = ZCOAP_CALLOC(1, sizeof(coap_cache_tree_t));
+    if (tree == NULL) {
+        return NULL;
+    }
+    // Evaluate tree depth and path length.
+    size_t depth = 0;
+    size_t plen = 0;
+    const coap_node_t *ncur = node;
+    while (ncur) {
+        ++depth;
+	if (ncur->name) {
+	    plen += strlen(ncur->name);
+	    plen += 1; // require NULL-termination for each path segment
+	}
+	ncur = ncur->parent;
+    }
+    // Allocate nested structures.
+    tree->nodes = ZCOAP_CALLOC(depth, sizeof(coap_node_t));
+    tree->children = ZCOAP_MALLOC((depth - 1 ) * 2 * sizeof(coap_node_t *));
+    tree->path = ZCOAP_MALLOC(plen);
+    if (tree->nodes == NULL || tree->children == NULL || tree->path == NULL) {
+        free_cache_tree(tree);
+	return NULL;
+    }
+    // Set context fields in the shadow tree leaf.
+    coap_node_t *leaf = &tree->nodes[depth - 1];
+    switch (method) {
+        case COAP_REQ_METHOD_GET:
+	    leaf->GET = handler;
+	    break;
+	case COAP_REQ_METHOD_PUT:
+	    leaf->PUT = handler;
+	    break;
+	case COAP_REQ_METHOD_POST:
+	    leaf->POST = handler;
+	    break;
+	case COAP_REQ_METHOD_DEL:
+	    leaf->DEL = handler;
+	    break;
+    }
+    leaf->data = tree;
+    leaf->block = true;
+    // Link the shadow tree together.
+    for (size_t i = 0; i < depth - 1; ++i) {
+        tree->nodes[i + 1].parent = &tree->nodes[i];
+	tree->children[i * 2] = &tree->nodes[i + 1];
+	tree->children[i * 2 + 1] = NULL; // Null terminate
+	tree->nodes[i].children = &tree->children[i * 2];
+    }
+    if (depth > 1) {
+        tree->nodes[depth - 1].parent = &tree->nodes[depth - 2];
+    }
+    // Copy path segments.
+    const coap_node_t *original = node;
+    coap_node_t *copy = &tree->nodes[depth - 1];
+    size_t pcur = 0;
+    while (original) {
+        ZCOAP_ASSERT(copy);
+	if (original->name) {
+            size_t slen = strlen(original->name);
+	    ZCOAP_MEMCPY(&tree->path[pcur], original->name, slen);
+	    pcur += slen;
+	    tree->path[pcur] = '\0'; // Null terminate
+	    copy->name = &tree->path[pcur];
+	    ZCOAP_ASSERT(pcur <= plen);
+	}
+	original = original->parent;
+	--depth;
+        copy = &tree->nodes[depth - 1];
+    }
+    
+    return tree;
+}
+
+/**
+ * Compare two endpoint cache structures.
+ *
+ * @param _a endpoint cache structure for comparison
+ * @param -b endpoint cache structure for comparison
+ * @return -1 if a>b, 0 if a==b, 1 if a>b
+ */
+static int ep_cache_cmp(const void * const _a, const void * const _b)
+{
+    ZCOAP_ASSERT(_a != NULL && _b != NULL);
+    coap_ep_cache_t *a = *(coap_ep_cache_t **)_a;
+    coap_ep_cache_t *b = *(coap_ep_cache_t **)_b;
+    ZCOAP_ASSERT(a != NULL && b != NULL);
+    return coap_endpoint_cmp(&a->endpoint, &b->endpoint);
 }
 
 /*********** End RFC7959 blockwise transfer utility functions. ************/
@@ -1823,9 +1942,8 @@ static int sub_map_cmp(const void * const _a, const void * const _b)
     ZCOAP_ASSERT(_a != NULL && _b != NULL);
     coap_subscriber_t *a = *(coap_subscriber_t **)_a;
     coap_subscriber_t *b = *(coap_subscriber_t **)_b;
-    ZCOAP_ASSERT(a->cmp != NULL);
     int rv = 0;
-    if ((rv = (*a->cmp)(a->endpoint, b->endpoint)) != 0) {
+    if ((rv = coap_endpoint_cmp(a->endpoint, b->endpoint)) != 0) {
         return rv;
     }
     return 0;
@@ -1848,8 +1966,7 @@ static int sub_tok_cmp(const void * const _a, const void * const _b)
     int rv = 0;
     coap_subscriber_t *suba = a->subscriber;
     coap_subscriber_t *subb = b->subscriber;
-    ZCOAP_ASSERT(suba->cmp != NULL);
-    if ((rv = (*suba->cmp)(suba->endpoint, subb->endpoint)) != 0) {
+    if ((rv = coap_endpoint_cmp(suba->endpoint, subb->endpoint)) != 0) {
         return rv;
     }
     if (a->tkl != b->tkl) {
@@ -1880,8 +1997,7 @@ static int sub_id_cmp(const void * const _a, const void * const _b)
     int rv = 0;
     coap_subscriber_t *suba = a->subscriber;
     coap_subscriber_t *subb = b->subscriber;
-    ZCOAP_ASSERT(suba->cmp != NULL);
-    if ((rv = (*suba->cmp)(suba->endpoint, subb->endpoint)) != 0) {
+    if ((rv = coap_endpoint_cmp(suba->endpoint, subb->endpoint)) != 0) {
         return rv;
     }
     if (a->id != b->id) {
@@ -1933,7 +2049,7 @@ __attribute__((nonnull (1, 2, 3)))
 alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t * const sub)
 {
     ZCOAP_ASSERT(map != NULL && req != NULL && sub != NULL);
-    coap_subscriber_t needle = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
+    coap_subscriber_t needle = { .endpoint = req->endpoint };
     coap_subscriber_t *key = &needle;
     coap_subscriber_t **_subscriber = map->subscribers ? bsearch(&key, map->subscribers, map->n_subscribers, sizeof(map->subscribers[0]), &sub_map_cmp) : NULL;
     coap_subscriber_t *subscriber = _subscriber ? *_subscriber : NULL;
@@ -1960,7 +2076,6 @@ alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t
         ZCOAP_ASSERT(req->endpoint != NULL);
         subscriber->deep_copy_endpoint = *req->endpoint; // must deep-copy subscriber endpoint information
         subscriber->endpoint = &subscriber->deep_copy_endpoint;
-        subscriber->cmp = map->endpoint_cmp;
         subscriber->responder = req->responder;
         subscriber->context = req->context;
         ++map->n_subscribers;
@@ -2090,7 +2205,7 @@ static coap_code_t subscribe(coap_req_data_t *req, coap_node_t * const node, coa
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
-    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = req->endpoint };
     coap_sub_t needle = { .node = node, .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
@@ -2234,7 +2349,7 @@ static coap_code_t unsubscribe(coap_req_data_t *req, coap_node_t * const node)
     if (req->msg->tkl > COAP_MAX_TKL) {
         return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
     }
-    coap_subscriber_t subscriber = { .endpoint = req->endpoint, .cmp = map->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = req->endpoint };
     coap_sub_t needle = { .subscriber = &subscriber, .tkl = req->msg->tkl };
     ZCOAP_MEMCPY(&needle.token, COAP_TOKEN(req->msg), req->msg->tkl);
     coap_sub_t *key = &needle;
@@ -2353,12 +2468,11 @@ coap_handle_ack(coap_req_data_t * const ack, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(ack != NULL && root != NULL);
     coap_sub_map_t * const map = get_sub_map(root);
-    ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
-    if (map == NULL || map->endpoint_cmp == NULL) {
+    if (map == NULL) {
         coap_discard(ack);
         return;
     }
-    coap_subscriber_t subscriber = { .endpoint = ack->endpoint, .cmp = map->endpoint_cmp };
+    coap_subscriber_t subscriber = { .endpoint = ack->endpoint };
     coap_sub_t needle = { .subscriber = &subscriber, .msg_ID = ack->msg->msg_ID };
     coap_sub_t *key = &needle;
     ZCOAP_LOCK(&map->lock);
@@ -2388,8 +2502,7 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
 {
     ZCOAP_ASSERT(reset != NULL && root != NULL);
     coap_sub_map_t * const map = get_sub_map(root);
-    ZCOAP_ASSERT(map == NULL || map->endpoint_cmp != NULL);
-    if (map == NULL || map->endpoint_cmp == NULL) {
+    if (map == NULL) {
         coap_discard(reset);
         return;
     }
@@ -2400,7 +2513,7 @@ coap_handle_reset(coap_req_data_t * const reset, const coap_node_t * const root)
         coap_sub_t **sub = &map->subtokmap[idx];
         ZCOAP_ASSERT(sub != NULL && (*sub)->subscriber != NULL);
         ZCOAP_LOG(ZCOAP_LOG_DEBUG, "%s: examining subscription=%p, subscriber=%p, token=0x%" PRIx64, __func__, *sub, (*sub)->subscriber, (*sub)->token);
-        if (map->endpoint_cmp(reset->endpoint, (*sub)->subscriber->endpoint)) {
+        if (coap_endpoint_cmp(reset->endpoint, (*sub)->subscriber->endpoint)) {
             ++idx;
             continue;
         }
@@ -3375,15 +3488,18 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
         }
         break;
     }
+    const iter_req_data_t iter_data = {
+        .req = req,
+        .nopts = nopts,
+        .opts = nopts ? opts : NULL,
+        .npath_opts = npath_opts,
+        .path_opts = first_path_opt,
+    };
+    // Locate cached block transfers.
+    //
+    // If requested, attempt to establish 
     // Dispatch.
     {
-        const iter_req_data_t iter_data = {
-            .req = req,
-            .nopts = nopts,
-            .opts = nopts ? opts : NULL,
-            .npath_opts = npath_opts,
-            .path_opts = first_path_opt,
-        };
         rc = _iter_req(root, &iter_data);
         if (rc && COAP_CODE_TO_CLASS(rc) != COAP_SUCCESS) {
             coap_status_rsp(req, rc);

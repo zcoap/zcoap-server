@@ -26,27 +26,84 @@
 #define PRIVATE_SERVER_ADDR INADDR_LOOPBACK
 
 /**
- * Compare two sockaddr_in structs.  The server needs this to match subscriber
- * endpoints to subscriptions.
+ * Compare sockaddr_in structures based upon ipaddr:port.
  *
- * @param _a sockaddr_in for comparison
- * @param _b sockaddr_in for comparison
- * @return -1 if a<b, 0 if a==b, 1 if a>b
+ * @param a address a for comparison
+ * @param b address b for comparison
+ * @return -1 if a<b, 1 if a>b, 0 if a==b
  */
-static int sockaddr_in_cmp(const void *_a, const void *_b)
+static int _addr_cmp4(const struct sockaddr_in *a, const struct sockaddr_in *b)
 {
-    const struct sockaddr_in *a = (const struct sockaddr_in *)_a;
-    const struct sockaddr_in *b = (const struct sockaddr_in *)_b;
-    if (a->sin_addr.s_addr != b->sin_addr.s_addr) {
-        return a->sin_addr.s_addr < b->sin_addr.s_addr ? -1 : 1;
+    if (a->sin_addr.s_addr < b->sin_addr.s_addr) {
+        return -1;
     }
-    if (a->sin_port != b->sin_port) {
-        return a->sin_port < b->sin_port ? -1 : 1;
+    if (a->sin_addr.s_addr > b->sin_addr.s_addr) {
+        return 1;
+    }
+    if (a->sin_port < b->sin_port) {
+        return -1;
+    }
+    if (a->sin_port > b->sin_port) {
+        return 1;
     }
     return 0;
 }
 
-static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER, .endpoint_cmp = &sockaddr_in_cmp };
+/**
+ * Compare sockaddr_in6 structures based upon ipaddr:port.
+ *
+ * @param a address a for comparison
+ * @param b address b for comparison
+ * @return -1 if a<b, 1 if a>b, 0 if a==b
+ */
+static int _addr_cmp6(const struct sockaddr_in6 *a, const struct sockaddr_in6 *b)
+{
+    int ipcmp = memcmp(&a->sin6_addr, &b->sin6_addr, sizeof(a->sin6_addr));
+    if (ipcmp < 0) {
+        return -1;
+    }
+    if (ipcmp > 0) {
+        return 1;
+    }
+    if (a->sin6_port < b->sin6_port) {
+        return -1;
+    }
+    if (a->sin6_port > b->sin6_port) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Compare two sockaddr structs.  The server needs this to match endpionts to
+ * subscirptions and stateful block transfers.
+ *
+ * @param a sockaddr for comparison
+ * @param b sockaddr for comparison
+ * @return -1 if a<b, 0 if a==b, 1 if a>b
+ */
+int coap_endpoint_cmp(const coap_endpoint_t *a, const coap_endpoint_t *b)
+{
+    if (a->sa.sa_family < b->sa.sa_family)
+    {
+        return -1;
+    }
+    if (a->sa.sa_family > b->sa.sa_family)
+    {
+        return -1;
+    }
+    switch (a->sa.sa_family)
+    {
+        case AF_INET:
+            return _addr_cmp4(&a->s4, &b->s4);
+        case AF_INET6:
+            return _addr_cmp6(&b->s6, &b->s6);
+        default:
+            return 0;
+    }
+}
+
+static coap_sub_map_t subs = { .lock = PTHREAD_MUTEX_INITIALIZER };
 
 /**
  * Emit a log message at level ERR and exit(EXIT_FAILURE).
@@ -133,17 +190,35 @@ static int spawn_polling_thread(float *period, pthread_t *thread)
 static void coap_udp_respond(coap_req_data_t * const req, const size_t len, const coap_msg_t *rsp)
 {
     int sockfd = req->context;
-    const struct sockaddr_in *cli_addr = req->endpoint;
-    ssize_t sent = sendto(sockfd, rsp, len, 0, (const struct sockaddr *)cli_addr, sizeof(*cli_addr));
+    socklen_t cli_len;
+    switch (req->endpoint->sa.sa_family) {
+        case AF_INET:
+            cli_len = sizeof(req->endpoint->s4);
+            break;
+        case AF_INET6:
+            cli_len = sizeof(req->endpoint->s6);
+            break;
+        default:
+            error("illegal sa_family %d", req->endpoint->sa.sa_family);
+    }
+    ssize_t sent = sendto(sockfd, rsp, len, 0, (const struct sockaddr *)req->endpoint, cli_len);
     if (sent < len) {
         error("socket write error on respond");
     }
-
-    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "Sent %ld bytes back to client at addr %s%s%s:%u!\n", sent,
-              cli_addr->sin_family == AF_INET6 ? "[" : "",
-              inet_ntoa(cli_addr->sin_addr),
-              cli_addr->sin_family == AF_INET6 ? "]" : "",
-              cli_addr->sin_port);
+    char addr[INET6_ADDRSTRLEN];
+    char *ntop_rv;
+    switch (req->endpoint->sa.sa_family) {
+        case AF_INET:
+            inet_ntop(AF_INET, &req->endpoint->s4.sin_addr, addr, sizeof(addr));
+            break;
+        case AF_INET6:
+            inet_ntop(AF_INET6, &req->endpoint->s6.sin6_addr, addr, sizeof(addr));
+            break;
+    }
+    ZCOAP_LOG(ZCOAP_LOG_DEBUG, "Sent %ld bytes back to client at addr %s%s%s:%u\n", sent,
+        req->endpoint->sa.sa_family == AF_INET6 ? "[" : "", addr,
+        req->endpoint->sa.sa_family == AF_INET6 ? "]" : "",
+        req->endpoint->sa.sa_family == AF_INET6 ? req->endpoint->s6.sin6_port : req->endpoint->s4.sin_port);
 }
 
 /**
@@ -153,11 +228,11 @@ static void coap_udp_respond(coap_req_data_t * const req, const size_t len, cons
  * @param len datagram payload length
  * @parm payload UDP payload - presumed to be a CoAP message structure
  */
-static void dispatch(int sockfd, coap_node_t root, struct sockaddr_in *cli_addr, const size_t len, const uint8_t payload[])
+static void dispatch(int sockfd, coap_node_t root, coap_endpoint_t *endpoint, const size_t len, const uint8_t payload[])
 {
     coap_req_data_t req = {
         .context = sockfd,
-        .endpoint = cli_addr,
+        .endpoint = endpoint,
         .msg = (const coap_msg_t *)payload,
         .len = len,
         .responder = &coap_udp_respond,
@@ -187,7 +262,7 @@ static void exit_handler(int signal)
  */
 static int coap_recv(int fd, ssize_t pending, uint8_t *buf, coap_node_t root)
 {
-    struct sockaddr_in cli_addr =  { 0 };
+    coap_endpoint_t cli_addr =  { 0 };
     socklen_t cli_len = sizeof(cli_addr);
     errno = 0;
     ssize_t received = recvfrom(fd, buf, pending, 0, (struct sockaddr *)&cli_addr, &cli_len);
@@ -453,47 +528,47 @@ int main(int argc, char *argv[])
                 break;
             }
         }
-	size_t len = sizeof(coap_msg_t); // Start at the minimum message size and grow from there.
-	buf = malloc(len);
-	if (buf == NULL) {
+        size_t len = sizeof(coap_msg_t); // Start at the minimum message size and grow from there.
+        buf = malloc(len);
+        if (buf == NULL) {
             ZCOAP_LOG(ZCOAP_LOG_ERR, "buffer allocation failed");
             exit_code = EXIT_FAILURE;
             goto server_cleanup;
-	}
+        }
         for (size_t i = 0; i < NELM(servers); ++i) {
             if (FD_ISSET(servers[i].fd, &fds)) {
-	        while (1) {
+                while (1) {
                     errno = 0;
-		    struct iovec iov = { .iov_base = buf, .iov_len = len };
-		    struct msghdr msg = { .msg_iov = &iov, .msg_iovlen = 1 };
-		    ssize_t pending = recvmsg(servers[i].fd, &msg, MSG_PEEK);
+                    struct iovec iov = { .iov_base = buf, .iov_len = len };
+                    struct msghdr msg = { .msg_iov = &iov, .msg_iovlen = 1 };
+                    ssize_t pending = recvmsg(servers[i].fd, &msg, MSG_PEEK);
                     if (pending < 0) {
                         ZCOAP_LOG(ZCOAP_LOG_ERR, "recvmsg failed with %d (%s)", errno, strerror(errno));
                         exit_code = EXIT_FAILURE;
                         goto server_cleanup;
                     }
-		    if (msg.msg_flags & MSG_TRUNC) {
-		        if (len >= MAX_UDP_PAYLOAD) {
+                    if (msg.msg_flags & MSG_TRUNC) {
+                        if (len >= MAX_UDP_PAYLOAD) {
                             ZCOAP_LOG(ZCOAP_LOG_ERR, "truncation detected, but buffer is at maximum size");
                             exit_code = EXIT_FAILURE;
                             goto server_cleanup;
-			}
-		        len = len * 2 > MAX_UDP_PAYLOAD ? MAX_UDP_PAYLOAD : len * 2;
-			free(buf);
-			buf = malloc(len);
-			if (buf == NULL) {
+                        }
+                        len = len * 2 > MAX_UDP_PAYLOAD ? MAX_UDP_PAYLOAD : len * 2;
+                        free(buf);
+                        buf = malloc(len);
+                        if (buf == NULL) {
                             ZCOAP_LOG(ZCOAP_LOG_ERR, "buffer allocation failed");
                             exit_code = EXIT_FAILURE;
                             goto server_cleanup;
-			}
-		        continue;
-		    }
+                        }
+                        continue;
+                    }
                     if (coap_recv(servers[i].fd, pending, buf, servers[i].root) < 0) {
                         exit_code = EXIT_FAILURE;
                         goto server_cleanup;
                     }
-		    break;
-		}
+                    break;
+                }
             }
         }
     }

@@ -240,11 +240,7 @@ typedef struct coap_req_data_s coap_req_data_t; // forward declaration
  * @param b endpoint for comparison
  * @return negative number if a<b, 0 if a==b, positive number if a>b
  */
-#ifdef __GNUC__
-typedef int __attribute__((nonnull (1, 2))) (*coap_endpoint_cmp_t)(const void * const a, const void * const b);
-#else
-typedef int (*coap_endpoint_cmp_t)(const void * const a, const void * const b);
-#endif
+typedef int (*coap_endpoint_cmp_t)(const coap_endpoint_t *a, const coap_endpoint_t *b);
 
 /**
  * coap_discard_t
@@ -351,12 +347,6 @@ typedef struct coap_subscriber_s {
      * Endpoint responder callback as set in original request.
      */
     coap_responder_t responder;
-    /**
-     * cmp
-     *
-     * Endpoint comparison function as set in the subscription map.
-     */
-    coap_endpoint_cmp_t cmp;
     /**
      * map
      *
@@ -524,15 +514,6 @@ typedef struct coap_sub_map_s {
      * when reading or writing subscription map structures.
      */
     coap_lock_t lock;
-    /**
-     * endpoint_cmp
-     *
-     * Implementation-specific 'endpoint-comparison' function.  This is called by
-     * the zcoap-server to compare client response routing information.  This
-     * can be used to identify duplicate subscriptions, match client-to-server
-     * ACKs to subscriptions and to sort subscriptions.
-     */
-    coap_endpoint_cmp_t endpoint_cmp;
 } coap_sub_map_t;
 
 // End RFC 7641 Observable structures
@@ -560,6 +541,32 @@ typedef struct coap_block_opt_s {
     coap_block_szx_t szx;
     bool more;
 } coap_block_opt_t;
+
+typedef struct coap_cache_tree_s coap_cache_tree_t;
+struct coap_cache_tree_s {
+    union {
+        coap_node_t *root;
+	coap_node_t *nodes;
+    };
+    coap_node_t **children;
+    char *path; // storage for path segments
+    coap_ct_t ct;
+    coap_block_opt_t block;
+    coap_size_t size;
+    coap_cache_tree_t *next;
+    uint8_t data[0];
+};
+
+typedef struct coap_ep_cache_s {
+    coap_endpoint_t endpoint;
+    coap_cache_tree_t *tree;
+} coap_ep_cache_t;
+
+typedef struct coap_block_cache_s {
+    coap_lock_t lock;
+    size_t n;
+    coap_ep_cache_t **endpoints;
+} coap_block_cache_t;
 
 // End RFC 7959 Block-Wise Transfer structures
 
@@ -938,12 +945,15 @@ struct coap_node_s {
     bool observable : 1;
     /**
      *
-     * stateless_blocks
+     * block
      *
-     * If true, do not maintain state for block-wise transfers in zcoap-server.
-     * Instead, hand block-wise requests directly to handlers.
+     * If true, the node is itself capable of handling block-wise transfers.
+     * Note that most nodes will rely upon zcoap-server to perform stateful
+     * block transfer on their behalf.  This flag is primarly useful for nodes
+     * that conduct stateless block transfer, or for nodes dynamically created
+     * by zcoap-server specifically for the purpose of stateful block transfer.
      */
-    bool stateless_blocks : 1;
+    bool block : 1;
     /**
      * singleton
      *
