@@ -1798,6 +1798,19 @@ static void free_cache_tree(coap_cache_tree_t *tree)
 }
 
 /**
+ * GET handler for stateful BLOCK1 GET requests managed by zcoap-server.
+ *
+ * @param req initiating CoAP request
+ * @param nopts number of request options
+ * @param opts request options
+ * @param node pointer to .well-known/core tree node
+ */
+static void coap_block1_get(ZCOAP_METHOD_SIGNATURE)
+{
+    ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
+}
+
+/**
  * PUT handler for stateful BLOCK1 PUT requests managed by zcoap-server.
  *
  * @param req initiating CoAP request
@@ -1811,7 +1824,26 @@ static void coap_block1_put(ZCOAP_METHOD_SIGNATURE)
 }
 
 /**
- * Allocate a sparse cache tree for the passed node.
+ * POST handler for stateful BLOCK1 POST requests managed by zcoap-server.
+ *
+ * @param req initiating CoAP request
+ * @param nopts number of request options
+ * @param opts request options
+ * @param node pointer to .well-known/core tree node
+ */
+static void coap_block1_post(ZCOAP_METHOD_SIGNATURE)
+{
+    ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
+}
+
+/**
+ * Allocate a sparse shadow tree cache for the passed node.  Shadow trees are
+ * used to cache stateful block transfers while they are in progress.
+ *
+ * @param node node for which to allocate a shadow tree cache
+ * @param method CoAP method from the initiating block request
+ * @param handler stateful handler for in-progress requests
+ * @return allocated shadow tree cache on success, NULL on failure
  */
 static coap_cache_tree_t *alloc_cache_tree(const coap_node_t * const node, unsigned method, coap_handler_t handler)
 {
