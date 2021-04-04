@@ -606,7 +606,7 @@ static int opt_cmp(const void * const a, const void * const b)
  * @param opts options array to search
  * @return href_filter_t structure
  */
-static href_filter_t get_href_filter(const size_t nopts, const coap_msg_opt_t opts[])
+static href_filter_t get_href_filter(const size_t nopts, const coap_opt_t opts[])
 {
     /* Per RFC6690:
      *
@@ -627,8 +627,8 @@ static href_filter_t get_href_filter(const size_t nopts, const coap_msg_opt_t op
     // Find *an* occurrence of a URI query option.  It may not be the first,
     // but per above, a client specifying more than one URI query for the
     // .well-known/core URI is violating RFC6690.
-    const coap_msg_opt_t key = { .num = COAP_OPT_URI_QUERY };
-    coap_msg_opt_t *a_query_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+    const coap_opt_t key = { .num = COAP_OPT_URI_QUERY };
+    coap_opt_t *a_query_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
     if (!a_query_opt) {
         return rv;
     }
@@ -991,40 +991,729 @@ static void coap_unlock(const coap_node_t *node)
     }
 }
 
+/************************** Begin options parsers. ***************************/
+
+/**
+ * Iterator function to find the next option in a CoAP message.
+ *
+ * @param buf (in/out) pointer to current location in a CoAP message; advanced past the parsed option
+ * @param remain (in/out) remaining bytes in the message; advanced past the parsed option
+ * @param num (out) parsed option  number
+ * @param len (out) parsed option length
+ * @param val (out) parsed option value
+ * @return 0 on success, else a CoAP error code
+ */
+static coap_code_t opt_next(const uint8_t **buf, size_t * const remain, uint32_t * const num, uint16_t * const len, const void **val)
+{
+    if (!*remain) {
+        return 0;
+    }
+    if (**buf == COAP_PAYLOAD_MARKER) {
+        *remain = 0;
+        ++*buf;
+        return 0;
+    }
+    size_t opd_ex_bytes = 0;
+    uint16_t option_delta = (**buf >> 4) & 0xF;
+    switch (option_delta) {
+        case 13:
+            if (*remain < 2) {
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+            }
+            option_delta = *(*buf + 1) + 13;
+            opd_ex_bytes = 1;
+            break;
+        case 14:
+            if (*remain < 3) {
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+            }
+            {
+                uint16_t net;
+                ZCOAP_MEMCPY(&net, *buf + 1, sizeof(net));
+                option_delta = ZCOAP_NTOHS(net) + 269;
+            }
+            opd_ex_bytes = 2;
+            break;
+        case 15:
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+        default:
+            break;
+    }
+    *num += option_delta;
+    size_t opl_ex_bytes = 0;
+    *len = **buf & 0xF;
+    switch (*len) {
+        case 13:
+            if (*remain < 2 + opd_ex_bytes) {
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+            }
+            *len = *(*buf + 1 + opd_ex_bytes) + 13;
+            opl_ex_bytes = 1;
+            break;
+        case 14:
+            if (*remain < 3 + opd_ex_bytes) {
+                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+            }
+            {
+                uint16_t net;
+                ZCOAP_MEMCPY(&net, *buf + 1 + opd_ex_bytes, sizeof(net));
+                *len = ZCOAP_NTOHS(net) + 269;
+            }
+            opl_ex_bytes = 2;
+            break;
+        case 15:
+            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+        default:
+            break;
+    }
+    size_t offset_to_val = 1 + opd_ex_bytes + opl_ex_bytes;
+    *buf += offset_to_val;
+    *remain -= offset_to_val;
+    if (*remain < *len) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+    *val = *buf;
+    *buf += *len;
+    *remain -= *len;
+    return 0;
+}
+
+/**
+ * Count the options in a CoAP request.
+ *
+ * @param req CoAP request for which to count options.
+ * @param nopts (out) number of options found in the request
+ * @return 0 on success, else a CoAP error code
+ */
+static coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 2)))
+#endif
+coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
+{
+    ZCOAP_ASSERT(req != NULL && req->msg != NULL && nopts != NULL);
+    if (req->len < sizeof(coap_msg_t)) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    if (req->msg->tkl > COAP_MAX_TKL) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    size_t remain = req->len - sizeof(coap_msg_t);
+    if (remain < req->msg->tkl) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    remain -= req->msg->tkl;
+    const uint8_t *ptr = COAP_OPTS(req->msg);
+    uint32_t opt_num = 0;
+    *nopts = 0;
+    while (remain && *ptr != COAP_PAYLOAD_MARKER) {
+        uint16_t opt_len; // discard
+        const void *opt_val; // discard
+        coap_code_t rc;
+        if ((rc = opt_next(&ptr, &remain, &opt_num, &opt_len, &opt_val))) {
+            return rc;
+        }
+        ++*nopts;
+    }
+    return 0;
+}
+
+/**
+ * Parse the options from the passed request.
+ *
+ * @param req CoAP request from which to parse options
+ * @param nopts maximum number of options to parse
+ * @param opts (out) write location for parsed options
+ * @return 0 on success, else a CoAP error code
+ */
+static coap_code_t
+#ifdef __GNUC__
+__attribute__((nonnull (1, 3)))
+#endif
+coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_opt_t* const opts)
+{
+    ZCOAP_ASSERT(req != NULL && req->msg != NULL && opts != NULL);
+    if (req->len < sizeof(coap_msg_t)) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    if (req->msg->tkl > COAP_MAX_TKL) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    size_t remain = req->len - sizeof(coap_msg_t);
+    if (remain < req->msg->tkl) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
+    }
+    remain -= req->msg->tkl;
+    const uint8_t *ptr = COAP_OPTS(req->msg);
+    uint32_t opt_num = 0;
+    for (size_t i = 0; i < nopts; ++i) {
+        if (!remain || *ptr == COAP_PAYLOAD_MARKER) {
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+        coap_code_t rc;
+        if ((rc = opt_next(&ptr, &remain, &opt_num, &opts[i].len, &opts[i].val))) {
+            return rc;
+        }
+	if (opt_num > COAP_OPT_MAX) {
+	    return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+	}
+        opts[i].num = opt_num;
+    }
+    return 0;
+}
+
+/**
+ * Extract an option of the passed type.  If not found, opt->num is set to 0.
+ *
+ * Note that even if multiple like-numbered options are present in the request,
+ * only one is returned.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options, or null if options sgould be parsed from req
+ * @param needle option number to search for
+ * @param opt (out) extracted option of type specified by needle; opt->num set to 0 if not found
+ * @return 0 on success, else CoAP error code; option not found is NOT an error
+ */
+static coap_code_t coap_extract_opt(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], const coap_opt_num_t needle, coap_opt_t * const opt)
+
+{
+    if (   (opts == NULL && req == NULL)
+        || opt == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
+    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
+        return rc;
+    }
+    if (nopts == 0) {
+	*opt = (coap_opt_t){};
+        return 0;
+    }
+    // In the bsearch, we will find *an* occurrence of the specified option.
+    if (opts == NULL) {
+        if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+        }
+#ifdef __GNUC__
+        coap_opt_t lopts[nopts]; // allocate temp pointer array on the stack
+#else
+        coap_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
+#endif /* __GNUC__ */
+        if ((rc = coap_get_opts(req, nopts, lopts))) {
+            return rc;
+        }
+        const coap_opt_t key = { .num = needle };
+        coap_opt_t *_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+        if (_opt == NULL) {
+	    *opt = (coap_opt_t){};
+            return 0;
+        } else {
+            *opt = *_opt;
+	}
+    } else {
+        const coap_opt_t key = { .num = needle };
+        coap_opt_t *_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        if (_opt == NULL) {
+	    *opt = (coap_opt_t){};
+        } else {
+            *opt = *_opt;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Get a CoAP content type designator from a content format or accept option
+ * in a CoAP request.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options
+ * @param needle option number to search for; must be  COAP_OPT_CONTENT_FMT or COAP_OPT_ACCEPT
+ * @param ct (out) content type designator from the caller-specified option, or ZCOAP_FMT_NONE if the option was not found
+ * @return 0 on success, else CoAP error code; option not found is NOT an error
+ */
+static coap_code_t coap_get_content_type_designator(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], const coap_opt_num_t needle, coap_ct_t * const ct)
+{
+    if (   (needle != COAP_OPT_CONTENT_FMT && needle != COAP_OPT_ACCEPT)
+        || ct == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    *ct = ZCOAP_FMT_NONE;
+    coap_code_t rc;
+    coap_opt_t ct_opt = { 0 };
+    // In the bsearch, we will find *an* occurrence of a content-format option.
+    // If the requesting agent has enclosed more than one, that's a protocol
+    // violation on their part and not our problem.
+    if ((rc = coap_extract_opt(req, nopts, opts, needle, &ct_opt))) {
+        return rc;
+    }
+    if (ct_opt.num != needle) {
+        return 0;
+    }
+    if (!ct_opt.len) {
+        // Per RFC 7252, a zero-length option value field is simply
+        // empty.  And this is legal for the content format
+        // designator.  We'll interpret this as unspecified / don't
+        // care.  To the caller, this will be equivalent to the case
+        // where no content format option was included at all.
+        return 0;
+    }
+    if (ct_opt.len > sizeof(coap_ct_t)) {
+        // Per RFC6690, content format option value should be 65535 or less.
+        // We will therefore only accept 0, 1 and 2-byte value fields.  We
+        // suppose a client could pack a 2-byte big-endian content type into
+        // *more* bytes, but this seems an odd abuse of the wire format.
+        // Reject!
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    } else if (ct_opt.len == sizeof(coap_ct_t)) {
+        uint16_t netshort;
+        ZCOAP_MEMCPY(&netshort, ct_opt.val, sizeof(netshort));
+        *ct = ZCOAP_NTOHS(netshort);
+    } else {
+        *ct = *(uint8_t *)ct_opt.val;
+    }
+    return 0;
+}
+
+/**
+ * Get a CoAP content type designator from a content format option in a CoAP request.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
+ * @return 0 on success, else CoAP error code; option not found is NOT an error
+ */
+coap_code_t coap_get_content_fmt_option(coap_req_data_t* const req, size_t nopts, const coap_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
+}
+
+/**
+ * Get a CoAP content type designator from an accept option in a CoAP request.
+ *
+ * @param req request to search for accept option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
+ * @return 0 on success, else CoAP error code; option not found is NOT an error
+ */
+coap_code_t coap_get_accept_option(coap_req_data_t* const req, size_t nopts, const coap_opt_t opts[], coap_ct_t* const ct)
+{
+   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
+}
+
+/**
+ * Get a CoAP content type designator from the accept option in GET request or
+ * a content format option in a PUT/POST request.
+ *
+ * @param req request to search for content format option
+ * @param nopts number of options in the request
+ * @param opts parsed request options, or null if not available
+ * @param ct (out) content type designator from the enclosed content format option, or ZCOAP_FMT_NONE if the no content format option was found
+ * @return 0 on success, else CoAP error code; option not found is NOT an error
+ */
+coap_code_t coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_opt_t opts[], coap_ct_t* const ct)
+{
+    if (ct == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    switch (req->msg->code.code_class) {
+        case COAP_REQ:
+            switch (req->msg->code.code_detail) {
+                case COAP_REQ_METHOD_GET:
+                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
+                case COAP_REQ_METHOD_PUT:
+                case COAP_REQ_METHOD_POST:
+                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
+                default:
+                    *ct = ZCOAP_FMT_NONE;
+                    return 0;
+            }
+        default:
+            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+}
+
+/**
+ * Get a size1 or size2 option (if any exists) from the passed request or
+ * options array.
+ *
+ * @param req request to search for a size1/size2 option
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param needle option to search for (COAP_OPT_SIZE1 or COAP_OPT_SIZE2)
+ * @param found (out) written to true if the size option is found, else written to false
+ * @param size (out) size1 or size2 option value
+ * @return 0 on success, else a CoAP error code; note that size1/size2 not found is NOT an error
+ */
+static coap_code_t coap_get_sizex(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], const coap_opt_num_t needle, bool * const found, coap_size_t * const size)
+{
+    if (   (needle != COAP_OPT_SIZE1 && needle != COAP_OPT_SIZE2)
+        || found == NULL
+	|| size == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
+    coap_opt_t opt = { 0 };
+    // In the bsearch, we will find *an* occurrence of a size option.
+    // If the requesting agent has enclosed more than one, that's a protocol
+    // violation on their part and not our problem.
+    if ((rc = coap_extract_opt(req, nopts, opts, needle, &opt))) {
+        return rc;
+    }
+    if (opt.num != needle) {
+        *found = false;
+        return 0;
+    }
+    *found = true;
+    if (!opt.len) {
+        // Per RFC 7252, a zero-length option value field is simply empty.  And
+        // this is legal for the size1/2 designators.  We'll interpret this as
+        // unspecified / don't care.  To the caller, this will be equivalent to
+        // the case where no size option was included at all.
+        *found = false;
+        return 0;
+    } else if (opt.len > sizeof(coap_size_t)) {
+        // size1/2 values larger than 4 bytes violate the RFC
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+    *size = 0;
+    ZCOAP_MEMCPY(size, opt.val, opt.len);
+    *size = ZCOAP_NTOHL(*size);
+    return 0;
+}
+
+/**
+ * Get a size1 option (if any exists) from the passed request or
+ * options array.
+ *
+ * @param req request to search for a size1 option
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param found (out) written to true if the size option is found, else written to false
+ * @param size1 (out) size1 option value
+ * @return 0 on success, else a CoAP error code; note that size1 not found is NOT an error
+ */
+coap_code_t coap_get_size1(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], bool * const found, coap_size_t * const size1)
+{
+    return coap_get_sizex(req, nopts, opts, COAP_OPT_SIZE1, found, size1);
+}
+
+/**
+ * Get a size2 option (if any exists) from the passed request or
+ * options array.
+ *
+ * @param req request to search for a size2 option
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param found (out) written to true if the size option is found, else written to false
+ * @param size2 (out) size2 option value
+ * @return 0 on success, else a CoAP error code; note that size2 not found is NOT an error
+ */
+coap_code_t coap_get_size2(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], bool * const found, coap_size_t * const size2)
+{
+    return coap_get_sizex(req, nopts, opts, COAP_OPT_SIZE2, found, size2);
+}
+
+/**
+ * Extract a BLOCK1 or BLOCK2 option from the passed options array.
+ *
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param needle option number to search for; must be COAP_OPT_BLOCK1 or COAP_OPT_BLOCK2
+ * @param found (out) written true if found, else written false
+ * @param block (out) parsed block option parameters
+ * @return 0 on success, else CoAP error code
+ */
+static coap_code_t coap_get_blockx(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], coap_opt_num_t needle, bool * const found, coap_block_opt_t * const block)
+{
+    if (   (needle != COAP_OPT_BLOCK1 && needle != COAP_OPT_BLOCK2)
+        || found == NULL
+	|| block == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
+    coap_opt_t opt = { 0 };
+    // In the bsearch, we will find *an* occurrence of a block option.
+    // If the requesting agent has enclosed more than one of the given type,
+    // that's a protocol violation on their part and not our problem.
+    if ((rc = coap_extract_opt(req, nopts, opts, needle, &opt))) {
+        return rc;
+    }
+    if (opt.num != needle) {
+        *found = false;
+        return 0;
+    }
+    *found = true;
+    if (!opt.len || opt.len > COAP_BLOCK_OPT_BYTES) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+    block->idx = 0;
+    memcpy((uint8_t *)&block->idx + (sizeof(block->idx) - opt.len), opt.val, opt.len);
+    block->idx = ZCOAP_NTOHL(block->idx);
+    block->szx = block->idx & COAP_BLOCK_SZX_MASK;
+    block->more = block->idx & COAP_BLOCK_MORE_MASK ? true : false;
+    block->idx >>= COAP_BLOCK_SZX_BITS + COAP_BLOCK_MORE_BITS;
+    block->idx <<= block->szx + COAP_BLOCK_SZX_SHIFT_MIN;
+    return 0;
+}
+
+/**
+ * Extract a BLOCK1 option from the passed options array.
+ *
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param found (out) written true if found, else written false
+ * @param block (out) parsed block option parameters
+ * @return 0 on success, else CoAP error code
+ */
+coap_code_t coap_get_block1(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], bool * const found, coap_block_opt_t * const block1)
+{
+    return coap_get_blockx(req, nopts, opts, COAP_OPT_BLOCK1, found, block1);
+}
+
+/**
+ * Extract a BLOCK2 option from the passed options array.
+ *
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted request options
+ * @param found (out) written true if found, else written false
+ * @param block (out) parsed block option parameters
+ * @return 0 on success, else CoAP error code
+ */
+coap_code_t coap_get_block2(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], bool * const found, coap_block_opt_t * const block2)
+{
+    return coap_get_blockx(req, nopts, opts, COAP_OPT_BLOCK2, found, block2);
+}
+
+/**
+ * Count the number of options in the passed request of a particular type.
+ * Parses req for its options if caller passes opts == NULL.
+ *
+ * @param req CoAP request to parse
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted options from the passed request, or null if options should be parsed from req
+ * @param needle option number to search for
+ * @param cnt (out) number of options found of the specified type
+ * @return 0 on success, else a CoAP error code
+ */
+static coap_code_t coap_count_typed_opts(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], coap_opt_num_t needle, size_t * const cnt)
+{
+    if ((opts == NULL && req == NULL) || cnt== NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
+    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
+        return rc;
+    }
+    if (nopts == 0) {
+        *cnt = 0;
+        return 0;
+    }
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+#ifdef __GNUC__
+    coap_opt_t lopts[nopts];
+#else
+    coap_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
+#endif /* __GNUC__ */
+
+    if (opts == NULL) {
+        if ((rc = coap_get_opts(req, nopts, lopts))) {
+            return rc;
+        }
+    } else {
+        ZCOAP_MEMCPY(lopts, opts, sizeof(lopts));
+    }
+    // Find *an* occurrence of the option type.
+    const coap_opt_t key = { .num = needle };
+    coap_opt_t *an_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+    if (an_opt == NULL) {
+        *cnt = 0;
+        return 0;
+    }
+    // Now find the *first* occurrence of the specified option.
+    coap_opt_t *first_opt;
+    for (coap_opt_t *opt = an_opt; ; --opt) {
+        if (opt->num != needle) {
+            first_opt = opt + 1;
+            break;
+        }
+        if (opt == lopts) {
+            first_opt = opt;
+            break;
+        }
+    }
+    // Now count options.
+    *cnt = 0;
+    coap_opt_t *end = lopts + nopts;
+    for (coap_opt_t *opt = first_opt; opt < end && opt->num == needle; ++opt) {
+        ++*cnt;
+    }
+    return 0;
+}
+
+/**
+ * Extract all options of a given type.  If the caller passes opts == NULL,
+ * options are parsed from req.
+ *
+ * @param req CoAP request to search for options of the given type
+ * @param nopts number of options in the request
+ * @param opts parsed and sorted options, or null if options should be parsed from req
+ * @param needle option number to search for
+ * @param ntyped predetermined number of options of the given type; caller must already know this!
+ * @param typed (out) written with the options of the specified type
+ * @return 0 on success, else a CoAP error code
+ */
+coap_code_t coap_extract_opts(coap_req_data_t* const req, size_t nopts, const coap_opt_t opts[], coap_opt_num_t needle, const size_t ntyped, coap_opt_t * const typed)
+{
+    if (ntyped == 0) {
+        return 0;
+    }
+    if ((opts == NULL && req == NULL) || typed == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    coap_code_t rc;
+    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
+        return rc;
+    }
+    if (ntyped > nopts) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+
+    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
+        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+#ifdef __GNUC__
+    coap_opt_t lopts[nopts];
+#else
+    coap_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
+#endif /* __GNUC__ */
+
+    if (opts == NULL) {
+        if ((rc = coap_get_opts(req, nopts, lopts))) {
+            return rc;
+        }
+    } else {
+        ZCOAP_MEMCPY(lopts, opts, sizeof(lopts));
+    }
+    // Find *an* occurrence of a URI query option.
+    const coap_opt_t key = { .num = needle };
+    coap_opt_t *an_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
+    if (an_opt == NULL) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: unable to locate any options of number %u", __func__, needle);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    // Now find the *first* occurrence of the option.
+    coap_opt_t *first_opt;
+    for (coap_opt_t *opt = an_opt; ; --opt) {
+        if (opt->num != needle) {
+            first_opt = opt + 1;
+            break;
+        }
+        if (opt == lopts) {
+            first_opt = opt;
+            break;
+        }
+    }
+    // Now publish.
+    coap_opt_t *end = lopts + nopts;
+    if (first_opt + ntyped > end) {
+        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
+        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
+    }
+    ZCOAP_MEMCPY(typed, first_opt, ntyped * sizeof(typed[0]));
+    return 0;
+}
+
+/**
+ * Count the number of query options in the passed request.  Parses req for its
+ * options if caller passes opts == NULL.
+ *
+ * @param req CoAP request to parse
+ * @param nopts number of options in the request
+ * @param opts parsed options from the passed request, or null if the caller doesn't have these
+ * @param nqueryopts (out) number of query options found
+ * @return 0 on success, else a CoAP error code
+ */
+coap_code_t coap_count_query_opts(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], size_t * const nqueryopts)
+{
+    return coap_count_typed_opts(req, nopts, opts, COAP_OPT_URI_QUERY, nqueryopts);
+}
+
+/**
+ * Get the query options from the passed request.   Parses req for its options
+ * if caller passes opts == NULL.
+ *
+ * @param req CoAP request to parse for query options.
+ * @param nopts number of options in the request
+ * @param opts parsed options from the passed request, or null if the caller doesn't have these
+ * @param nqueryopts number of query options in the request
+ * @param queryopts (out) written with the requests query options
+ * @return 0 on success, else a CoAP error code
+ */
+coap_code_t coap_get_query_opts(coap_req_data_t * const req, size_t nopts, const coap_opt_t opts[], const size_t nqueryopts, coap_opt_t * const queryopts)
+{
+    return coap_extract_opts(req, nopts, opts, COAP_OPT_URI_QUERY, nqueryopts, queryopts);
+}
+
+/*************************** End options parsers. *****************************/
+
 /*********** Begin RFC7959 blockwise transfer utility functions. ************/
 
 /**
- * Write an appropriately formatted block option with value pointing to the
- * ence number.  Reorder sequence for big-endian transmission.
+ * Write an appropriately formatted block option with value written to the passed
+ * buffer.
  *
- * @param seq (in, out) sequence number to convert to big-endian and enclose in the option structure
- * @param opt (out) option structure to write into
+ * @param num option number (BLOCK1 or BLOCK2)
+ * @param block block option parameters to serialize into an option
+ * @param val (out) block option value storage location
+ * @param opt (out) block option
+ * @return 0 on success, else CoAP error code
  */
-static void
+static coap_code_t
 #ifdef __GNUC__
-__attribute__((nonnull (5, 6)))
+__attribute__((nonnull (3, 4)))
 #endif
-build_block_option(const coap_opt_num_t num, const coap_block_szx_t szx, const bool more, const coap_block_idx_t idx, coap_block_buf_t * const val, coap_opt_t * const opt)
+build_block_option(const coap_opt_num_t num, coap_block_opt_t block, coap_block_buf_t * const val, coap_opt_t * const opt)
 {
     ZCOAP_ASSERT(   (num == COAP_OPT_BLOCK1 || num == COAP_OPT_BLOCK2)
-                 && szx <= COAP_BLOCK_SZX_MAX
-		 && idx <= COAP_BLOCK_INDEX_MAX
+                 && block.szx <= COAP_BLOCK_SZX_MAX
+		 && block.idx <= COAP_BLOCK_INDEX_MAX
 		 && val != NULL
 		 && opt != NULL);
-    const unsigned shift  = szx + COAP_BLOCK_SZX_SHIFT_MIN;
+    const unsigned shift  = block.szx + COAP_BLOCK_SZX_SHIFT_MIN;
     const coap_block_idx_t mask = (1 << shift) - 1;
-    ZCOAP_ASSERT((idx & mask) == 0);
-    *val = idx >> shift;
+    if ((block.idx & mask) != 0) {
+        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
+    }
+    *val = block.idx >> shift;
     opt->num = num;
-    opt->len = *val <= 0xF ? 1 : * val <= 0xFFF ? 2 : 3;
-    *val <<= COAP_BLOCK_SZX_BITS + COAP_BLOCK_M_BITS;
-    *val |= szx;
-    *val |= more ? 1U << COAP_BLOCK_SZX_BITS : 0;
+    opt->len = *val <= 0xF ? 1 : *val <= 0xFFF ? 2 : 3;
+    *val <<= COAP_BLOCK_SZX_BITS + COAP_BLOCK_MORE_BITS;
+    *val |= block.szx;
+    *val |= block.more ? COAP_BLOCK_MORE_MASK : 0;
     *val = ZCOAP_HTONL(*val);
     opt->val = (uint8_t *)val + (sizeof(*val) - opt->len);
+    return 0;
 }
-
-
 
 /*********** End RFC7959 blockwise transfer utility functions. ************/
 
@@ -1283,7 +1972,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull (1, 2)))
 #endif
-extract_obs_seq(coap_msg_opt_t *opt, coap_obs_seq_t *seq)
+extract_obs_seq(coap_opt_t *opt, coap_obs_seq_t *seq)
 {
     ZCOAP_ASSERT(opt != NULL && seq != NULL);
     if (opt->num != COAP_OPT_OBSERVE) {
@@ -1510,14 +2199,14 @@ static coap_code_t unsubscribe(coap_req_data_t *req, coap_node_t * const node)
  * @param parsed options array
  * @return 0 on success, an appropriate CoAP error code on failure
  */
-static coap_code_t process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], coap_ct_t ct)
+static coap_code_t process_observe_req(coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_opt_t opts[], coap_ct_t ct)
 {
     ZCOAP_ASSERT(node != NULL && req != NULL && req->msg != NULL && req->msg->code.code_class == COAP_REQ);
     // Find *an* occurrence of an observe option.  Behavior for client
     // inclusion of multiple observe options isn't defined.  We are within
     // our rights to identify at most one.
-    const coap_msg_opt_t key = { .num = COAP_OPT_OBSERVE };
-    coap_msg_opt_t *observe_opt = opts ? bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp) : NULL;
+    const coap_opt_t key = { .num = COAP_OPT_OBSERVE };
+    coap_opt_t *observe_opt = opts ? bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp) : NULL;
     if (observe_opt == NULL) {
         return 0; // Non-error zero return.
     }
@@ -2180,327 +2869,6 @@ static coap_node_t *wellknown_children[] = { &core_uri, NULL };
 coap_node_t wellknown_uri = { .name = ".well-known", .children = wellknown_children };
 
 /**
- * Iterator function to find the next option in a CoAP message.
- *
- * @param buf (in/out) pointer to current location in a CoAP message; advanced past the parsed option
- * @param remain (in/out) remaining bytes in the message; advanced past the parsed option
- * @param num (out) parsed option  number
- * @param len (out) parsed option length
- * @param val (out) parsed option value
- * @return 0 on success, else a CoAP error code
- */
-static coap_code_t opt_next(const uint8_t **buf, size_t * const remain, uint32_t * const num, uint16_t * const len, const void **val)
-{
-    if (!*remain) {
-        return 0;
-    }
-    if (**buf == COAP_PAYLOAD_MARKER) {
-        *remain = 0;
-        ++*buf;
-        return 0;
-    }
-    size_t opd_ex_bytes = 0;
-    uint16_t option_delta = (**buf >> 4) & 0xF;
-    switch (option_delta) {
-        case 13:
-            if (*remain < 2) {
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-            }
-            option_delta = *(*buf + 1) + 13;
-            opd_ex_bytes = 1;
-            break;
-        case 14:
-            if (*remain < 3) {
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-            }
-            {
-                uint16_t net;
-                ZCOAP_MEMCPY(&net, *buf + 1, sizeof(net));
-                option_delta = ZCOAP_NTOHS(net) + 269;
-            }
-            opd_ex_bytes = 2;
-            break;
-        case 15:
-            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-        default:
-            break;
-    }
-    *num += option_delta;
-    size_t opl_ex_bytes = 0;
-    *len = **buf & 0xF;
-    switch (*len) {
-        case 13:
-            if (*remain < 2 + opd_ex_bytes) {
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-            }
-            *len = *(*buf + 1 + opd_ex_bytes) + 13;
-            opl_ex_bytes = 1;
-            break;
-        case 14:
-            if (*remain < 3 + opd_ex_bytes) {
-                return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-            }
-            {
-                uint16_t net;
-                ZCOAP_MEMCPY(&net, *buf + 1 + opd_ex_bytes, sizeof(net));
-                *len = ZCOAP_NTOHS(net) + 269;
-            }
-            opl_ex_bytes = 2;
-            break;
-        case 15:
-            return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-        default:
-            break;
-    }
-    size_t offset_to_val = 1 + opd_ex_bytes + opl_ex_bytes;
-    *buf += offset_to_val;
-    *remain -= offset_to_val;
-    if (*remain < *len) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-    }
-    *val = *buf;
-    *buf += *len;
-    *remain -= *len;
-    return 0;
-}
-
-/**
- * Count the options in a CoAP request.
- *
- * @param req CoAP request for which to count options.
- * @param nopts (out) number of options found in the request
- * @return 0 on success, else a CoAP error code
- */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 2)))
-#endif
-coap_count_opts(coap_req_data_t* const req, size_t* const nopts)
-{
-    ZCOAP_ASSERT(req != NULL && req->msg != NULL && nopts != NULL);
-    if (req->len < sizeof(coap_msg_t)) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    if (req->msg->tkl > COAP_MAX_TKL) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    size_t remain = req->len - sizeof(coap_msg_t);
-    if (remain < req->msg->tkl) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    remain -= req->msg->tkl;
-    const uint8_t *ptr = COAP_OPTS(req->msg);
-    uint32_t opt_num = 0;
-    *nopts = 0;
-    while (remain && *ptr != COAP_PAYLOAD_MARKER) {
-        uint16_t opt_len; // discard
-        const void *opt_val; // discard
-        coap_code_t rc;
-        if ((rc = opt_next(&ptr, &remain, &opt_num, &opt_len, &opt_val))) {
-            return rc;
-        }
-        ++*nopts;
-    }
-    return 0;
-}
-
-/**
- * Parse the options from the passed request.
- *
- * @param req CoAP request from which to parse options
- * @param nopts maximum number of options to parse
- * @param opts (out) write location for parsed options
- * @return 0 on success, else a CoAP error code
- */
-static coap_code_t
-#ifdef __GNUC__
-__attribute__((nonnull (1, 3)))
-#endif
-coap_get_opts(coap_req_data_t* const req, const size_t nopts, coap_msg_opt_t* const opts)
-{
-    ZCOAP_ASSERT(req != NULL && req->msg != NULL && opts != NULL);
-    if (req->len < sizeof(coap_msg_t)) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    if (req->msg->tkl > COAP_MAX_TKL) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    size_t remain = req->len - sizeof(coap_msg_t);
-    if (remain < req->msg->tkl) {
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_REQ);
-    }
-    remain -= req->msg->tkl;
-    const uint8_t *ptr = COAP_OPTS(req->msg);
-    uint32_t opt_num = 0;
-    for (size_t i = 0; i < nopts; ++i) {
-        if (!remain || *ptr == COAP_PAYLOAD_MARKER) {
-            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-        }
-        coap_code_t rc;
-        if ((rc = opt_next(&ptr, &remain, &opt_num, &opts[i].len, &opts[i].val))) {
-            return rc;
-        }
-        opts[i].num = opt_num;
-    }
-    return 0;
-}
-
-/**
- * Get a CoAP content type designator from a content format or accept option
- * in a CoAP request.  Parses req for its options if caller passes opts == NULL.
- *
- * @param req request to search for content format option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param needle option number to search for; must be  COAP_OPT_CONTENT_FMT or COAP_OPT_ACCEPT
- * @param ct (out) content type designator from the caller-specified option, or ZCOAP_FMT_NONE if the option was not found
- * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
- */
-static coap_code_t coap_get_content_type_designator(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_opt_num_t needle, coap_ct_t* const ct)
-{
-    if (needle != COAP_OPT_CONTENT_FMT && needle != COAP_OPT_ACCEPT) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    if (ct == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    if (opts == NULL && req == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    *ct = ZCOAP_FMT_NONE;
-    coap_code_t rc;
-    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
-        return rc;
-    }
-    if (nopts == 0) {
-        *ct = ZCOAP_FMT_NONE;
-        return 0;
-    }
-    coap_msg_opt_t ct_opt = { 0 };
-    // In the bsearch, we will find *an* occurrence of a content-format option.
-    // If the requesting agent has enclosed more than one, that's a protocol
-    // violation on their part and not our problem.
-    if (opts == NULL) {
-        if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-        }
-#ifdef __GNUC__
-        coap_msg_opt_t lopts[nopts]; // allocate temp pointer array on the stack
-#else
-        coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
-#endif /* __GNUC__ */
-        if ((rc = coap_get_opts(req, nopts, lopts))) {
-            return rc;
-        }
-        const coap_msg_opt_t key = { .num = needle };
-        coap_msg_opt_t *_ct_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
-        if (_ct_opt == NULL) {
-            *ct = ZCOAP_FMT_NONE;
-            return 0;
-        }
-        ct_opt = *_ct_opt;
-    } else {
-        const coap_msg_opt_t key = { .num = needle };
-        coap_msg_opt_t *_ct_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
-        if (_ct_opt == NULL) {
-            *ct = ZCOAP_FMT_NONE;
-            return 0;
-        }
-        ct_opt = *_ct_opt;
-    }
-    if (!ct_opt.len) {
-        // Per RFC 7252, a zero-length option value field is simply
-        // empty.  And this is legal for the content format
-        // designator.  We'll interpret this as unspecified / don't
-        // care.  To the caller, this will be equivalent to the case
-        // where no content format option was included at all.
-        return 0;
-    }
-    if (ct_opt.len > sizeof(coap_ct_t)) {
-        // Per RFC6690, content format option value should be 65535 or less.
-        // We will therefore only accept 0, 1 and 2-byte value fields.  We
-        // suppose a client could pack a 2-byte big-endian content type into
-        // *more* bytes, but this seems an odd abuse of the wire format.
-        // Reject!
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-    } else if (ct_opt.len == sizeof(coap_ct_t)) {
-        uint16_t netshort;
-        ZCOAP_MEMCPY(&netshort, ct_opt.val, sizeof(netshort));
-        *ct = ZCOAP_NTOHS(netshort);
-    } else {
-        *ct = *(uint8_t *)ct_opt.val;
-    }
-    return 0;
-}
-
-/**
- * Get a CoAP content type designator from an content format option in a CoAP request.
- *
- * @param req request to search for content format option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
- * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
- */
-coap_code_t coap_get_content_fmt_option(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
-{
-   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
-}
-
-/**
- * Get a CoAP content type designator from an accept option in a CoAP request.
- *
- * @param req request to search for content format option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param ct (out) content type designator from the enclosed accept option, or ZCOAP_FMT_NONE if the no accept option was found
- * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
- */
-coap_code_t coap_get_accept_option(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
-{
-   return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
-}
-
-/**
- * Get a CoAP content type designator from the accept option in GET request or
- * a content format option in a PUT/POST request.
- *
- * @param req request to search for content format option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param ct (out) content type designator from the enclosed content format option, or ZCOAP_FMT_NONE if the no content format option was found
- * @return 0 on success, else CoAP error code; note that content format option not found is NOT an error; in such a case, content_fmt remains unwritten
- */
-coap_code_t coap_get_content_type(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* const ct)
-{
-    if (ct == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    switch (req->msg->code.code_class) {
-        case COAP_REQ:
-            switch (req->msg->code.code_detail) {
-                case COAP_REQ_METHOD_GET:
-                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_ACCEPT, ct);
-                case COAP_REQ_METHOD_PUT:
-                case COAP_REQ_METHOD_POST:
-                    return coap_get_content_type_designator(req, nopts, opts, COAP_OPT_CONTENT_FMT, ct);
-                default:
-                    *ct = ZCOAP_FMT_NONE;
-                    return 0;
-            }
-        default:
-            ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-}
-
-/**
  * Get the payload from the passed request.
  *
  * @param req CoAP request to parse
@@ -2573,7 +2941,7 @@ static coap_code_t
 #ifdef __GNUC__
 __attribute__((nonnull (1, 4)))
 #endif
-process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_msg_opt_t opts[], coap_node_t* const node)
+process_req_uri(coap_req_data_t* const req, const size_t nopts, const coap_opt_t opts[], coap_node_t* const node)
 {
     ZCOAP_ASSERT(req != NULL && req->msg != NULL && node != NULL);
     req->state.node = node->singleton ? node : NULL;
@@ -2704,9 +3072,9 @@ static coap_code_t iter_req(coap_node_t* const node, const void* data);
 typedef struct iter_req_data_s {
     coap_req_data_t * const req;
     const size_t nopts;
-    const coap_msg_opt_t *opts;
+    const coap_opt_t *opts;
     size_t npath_opts;
-    const coap_msg_opt_t *path_opts;
+    const coap_opt_t *path_opts;
 } iter_req_data_t;
 
 
@@ -2732,7 +3100,7 @@ _iter_req(coap_node_t * const node, const void * data)
         return process_req_uri(cdata->req, cdata->nopts, cdata->opts, node);
     }
     const size_t count = coap_count_children(node);
-    const coap_msg_opt_t *opt = &cdata->path_opts[0];
+    const coap_opt_t *opt = &cdata->path_opts[0];
     // We bounds check for ZCOAP_MAX_BUF_SIZE and skip path segments that are
     // too large.  We can't allow clients to inject data that will grow our
     // stack unreasonably.
@@ -2766,7 +3134,7 @@ _iter_req(coap_node_t * const node, const void * data)
         }
     }
     if (node->wildcard) { // if no children matched, but the parent has wildcard set, recurse into the wildcard function
-        const coap_msg_opt_t *opt = &cdata->path_opts[0];
+        const coap_opt_t *opt = &cdata->path_opts[0];
         // We bounds check for ZCOAP_MAX_BUF_SIZE and skip path segments that are
         // too large.  We can't allow clients to inject data that will grow our
         // stack unreasonably.
@@ -2871,7 +3239,7 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
     ZCOAP_ASSERT(req != NULL && root != NULL);
     size_t nopts;
     size_t npath_opts = 0;
-    coap_msg_opt_t *first_path_opt = NULL;
+    coap_opt_t *first_path_opt = NULL;
     coap_code_t rc;
     // Count options.
     if ((rc = coap_count_opts(req, &nopts))) {
@@ -2885,9 +3253,9 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
         return;
     }
 #ifdef __GNUC__
-    coap_msg_opt_t opts[nopts];
+    coap_opt_t opts[nopts];
 #else
-    coap_msg_opt_t opts[ZCOAP_MAX_PAYLOAD_OPTS];
+    coap_opt_t opts[ZCOAP_MAX_PAYLOAD_OPTS];
 #endif /* __GNUC__ */
 
     if ((rc = coap_get_opts(req, nopts, opts))) {
@@ -2897,16 +3265,16 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
     // Search for any occurrences of proxy options.
     // We do not support forward-proxy operation.
     {
-        const coap_msg_opt_t key = { .num = COAP_OPT_PROXY_URI };
-        const coap_msg_opt_t * const proxy_uri_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        const coap_opt_t key = { .num = COAP_OPT_PROXY_URI };
+        const coap_opt_t * const proxy_uri_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
         if (proxy_uri_opt != NULL) {
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_NO_PROXY_SUPPORT));
             return;
         }
     }
     {
-        const coap_msg_opt_t key = { .num = COAP_OPT_PROXY_SCHEME };
-        const coap_msg_opt_t * const proxy_scheme_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        const coap_opt_t key = { .num = COAP_OPT_PROXY_SCHEME };
+        const coap_opt_t * const proxy_scheme_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
         if (proxy_scheme_opt != NULL) {
             coap_status_rsp(req, COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_NO_PROXY_SUPPORT));
             return;
@@ -2915,13 +3283,13 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
     // Parse for path options.
     while (nopts) {
         // Find *an* occurrence of a path option (perhaps not the first).
-        const coap_msg_opt_t key = { .num = COAP_OPT_PATH };
-        coap_msg_opt_t *a_path_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
+        const coap_opt_t key = { .num = COAP_OPT_PATH };
+        coap_opt_t *a_path_opt = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
         if (a_path_opt == NULL) {
             break; // no path options
         }
         // Now find the *first* occurrence of a path option.
-        for (coap_msg_opt_t *opt = a_path_opt; ; --opt) {
+        for (coap_opt_t *opt = a_path_opt; ; --opt) {
             if (opt->num != COAP_OPT_PATH) {
                 first_path_opt = opt + 1;
                 break;
@@ -2931,9 +3299,9 @@ inject_coap_req(coap_req_data_t* const req, coap_node_t* const root)
                 break;
             }
         }
-        coap_msg_opt_t *end = opts + nopts;
+        coap_opt_t *end = opts + nopts;
         npath_opts = 0;
-        for (coap_msg_opt_t *opt = first_path_opt; opt < end && opt->num == COAP_OPT_PATH; ++opt) {
+        for (coap_opt_t *opt = first_path_opt; opt < end && opt->num == COAP_OPT_PATH; ++opt) {
             ++npath_opts;
         }
         break;
@@ -3081,230 +3449,6 @@ void coap_init(coap_node_t root)
     ZCOAP_ASSERT(!root.observable); // Observation of root node not supported.
     root.singleton = true; // Project singleton characteristic into children.
     iter_coap_sort(&root, NULL);
-}
-
-/*********** Begin general request processing utililty functions. ************/
-
-/**
- * Count the number of query options in the passed request.  Parses req for its
- * options if caller passes opts == NULL.
- *
- * @param req CoAP request to parse
- * @param nopts number of options in the request
- * @param opts parsed options from the passed request, or null if the caller doesn't have these
- * @param nqueryopts (out) number of query options found
- * @return 0 on success, else a CoAP error code
- */
-coap_code_t coap_count_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], size_t* const nqueryopts)
-{
-    if ((opts == NULL && req == NULL) || nqueryopts == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    coap_code_t rc;
-    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
-        return rc;
-    }
-    if (nopts == 0) {
-        *nqueryopts = 0;
-        return 0;
-    }
-    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-#ifdef __GNUC__
-    coap_msg_opt_t lopts[nopts];
-#else
-    coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
-#endif /* __GNUC__ */
-
-    if (opts == NULL) {
-        if ((rc = coap_get_opts(req, nopts, lopts))) {
-            return rc;
-        }
-    } else {
-        ZCOAP_MEMCPY(lopts, opts, sizeof(lopts));
-    }
-    // Find *an* occurrence of a URI query option.
-    const coap_msg_opt_t key = { .num = COAP_OPT_URI_QUERY };
-    coap_msg_opt_t *a_query_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
-    if (a_query_opt == NULL) {
-        *nqueryopts = 0;
-        return 0;
-    }
-    // Now find the *first* occurrence of a URI query option.
-    coap_msg_opt_t *first_query_opt;
-    for (coap_msg_opt_t *opt = a_query_opt; ; --opt) {
-        if (opt->num != COAP_OPT_URI_QUERY) {
-            first_query_opt = opt + 1;
-            break;
-        }
-        if (opt == lopts) {
-            first_query_opt = opt;
-            break;
-        }
-    }
-    // Now count URI query options.
-    *nqueryopts = 0;
-    coap_msg_opt_t *end = lopts + nopts;
-    for (coap_msg_opt_t *opt = first_query_opt; opt < end && opt->num == COAP_OPT_URI_QUERY; ++opt) {
-        ++*nqueryopts;
-    }
-    return 0;
-}
-
-/**
- * Get the query options from the passed request.   Parses req for its options
- * if caller passes opts == NULL.
- *
- * @param req CoAP request to parse for query options.
- * @param nopts number of options in the request
- * @param opts parsed options from the passed request, or null if the caller doesn't have these
- * @param nqueryopts number of query options in the request
- * @param queryopts (out) written with the requests query options
- * @return 0 on success, else a CoAP error code
- */
-coap_code_t coap_get_query_opts(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], const size_t nqueryopts, coap_msg_opt_t* const queryopts)
-{
-    if (nqueryopts == 0) {
-        return 0;
-    }
-    if ((opts == NULL && req == NULL) || queryopts == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    coap_code_t rc;
-    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
-        return rc;
-    }
-    if (nqueryopts > nopts) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-
-    if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-        ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-#ifdef __GNUC__
-    coap_msg_opt_t lopts[nopts];
-#else
-    coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
-#endif /* __GNUC__ */
-
-    if (opts == NULL) {
-        if ((rc = coap_get_opts(req, nopts, lopts))) {
-            return rc;
-        }
-    } else {
-        ZCOAP_MEMCPY(lopts, opts, sizeof(lopts));
-    }
-    // Find *an* occurrence of a URI query option.
-    const coap_msg_opt_t key = { .num = COAP_OPT_URI_QUERY };
-    coap_msg_opt_t *a_query_opt = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
-    if (a_query_opt == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: unable to locate query option", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    // Now find the *first* occurrence of a URI query option.
-    coap_msg_opt_t *first_query_opt;
-    for (coap_msg_opt_t *opt = a_query_opt; ; --opt) {
-        if (opt->num != COAP_OPT_URI_QUERY) {
-            first_query_opt = opt + 1;
-            break;
-        }
-        if (opt == lopts) {
-            first_query_opt = opt;
-            break;
-        }
-    }
-    // Now publish.
-    coap_msg_opt_t *end = lopts + nopts;
-    if (first_query_opt + nqueryopts > end) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: options parse error", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    ZCOAP_MEMCPY(queryopts, first_query_opt, nqueryopts * sizeof(queryopts[0]));
-    return 0;
-}
-
-/**
- * Get a size1 option (if any exists) from the passed request.  Parses req for
- * its options if caller passes opts == NULL.
- *
- * @param req request to search for a size1 option
- * @param nopts number of options in the request
- * @param opts parsed request options, or null if not available
- * @param found (out) written to true if size1 is found, else written to false
- * @param size1 (out) size1 option value
- * @return 0 on success, else a CoAP error code; note that size1 not found is NOT an error
- */
-uint8_t coap_get_size1(coap_req_data_t* const req, size_t nopts, const coap_msg_opt_t opts[], bool* const found, uint32_t* const size1)
-{
-    if ((opts == NULL && req == NULL) || found == NULL || size1 == NULL) {
-        ZCOAP_LOG(ZCOAP_LOG_ERR, "%s: illegal arguments", __func__);
-        return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-    }
-    coap_code_t rc;
-    if (opts == NULL && (rc = coap_count_opts(req, &nopts))) {
-        return rc;
-    }
-    if (nopts == 0) {
-        *found = false;
-        return 0;
-    }
-    // In the bsearch, we will find *an* occurrence of a size1 option. If the
-    // requesting agent has enclosed more than one, that's a protocol violation
-    // on their part and not our problem.
-    coap_msg_opt_t msg_size1;
-    if (opts == NULL) {
-
-        if (nopts > ZCOAP_MAX_PAYLOAD_OPTS) {
-            ZCOAP_LOG(ZCOAP_LOG_WARNING, "%s: too many options", __func__);
-            return COAP_CODE(COAP_SERVER_ERR, COAP_SERVER_ERR_INTERNAL);
-        }
-#ifdef __GNUC__
-        coap_msg_opt_t lopts[nopts];
-#else
-        coap_msg_opt_t lopts[ZCOAP_MAX_PAYLOAD_OPTS];
-#endif /* __GNUC__ */
-
-        if ((rc = coap_get_opts(req, nopts, lopts))) {
-            return rc;
-        }
-        const coap_msg_opt_t key = { .num = COAP_OPT_SIZE1 };
-        coap_msg_opt_t *_msg_size1 = bsearch(&key, lopts, nopts, sizeof(lopts[0]), &opt_cmp);
-        if (_msg_size1 == NULL) {
-            *found = false;
-            return 0;
-        }
-        msg_size1 = *_msg_size1;
-    } else {
-        const coap_msg_opt_t key = { .num = COAP_OPT_SIZE1 };
-        coap_msg_opt_t *_msg_size1 = bsearch(&key, opts, nopts, sizeof(opts[0]), &opt_cmp);
-        if (_msg_size1 == NULL) {
-            *found = false;
-            return 0;
-        }
-        msg_size1 = *_msg_size1;
-    }
-    *found = true;
-    if (!msg_size1.len) {
-        // Per RFC 7252, a zero-length option value field is simply empty.  And
-        // this is legal for the size1 designator.  We'll interpret this as
-        // unspecified / don't care.  To the caller, this will be equivalent to
-        // the case where no size1 option was included at all.
-        *found = false;
-        return 0;
-    } else if (msg_size1.len > sizeof(uint32_t)) {
-        // size1 values larger than 4 bytes violate the RFC
-        return COAP_CODE(COAP_CLIENT_ERR, COAP_CLIENT_ERR_BAD_OPT);
-    }
-    memset(size1, 0, sizeof(*size1));
-    ZCOAP_MEMCPY(size1, msg_size1.val, msg_size1.len);
-    *size1 = ZCOAP_NTOHL(*size1);
-    return 0;
 }
 
 /************** Begin string-to-numerical conversion functions. **************/

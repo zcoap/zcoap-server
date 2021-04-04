@@ -540,28 +540,26 @@ typedef struct coap_sub_map_s {
 // RFC 7959 Block-Wise Transfers
 
 #define COAP_BLOCK_SZX_BITS 3
-#define COAP_BLOCK_M_BITS 1
+#define COAP_BLOCK_SZX_MASK ((1U << (COAP_BLOCK_SZX_BITS)) - 1)
+#define COAP_BLOCK_MORE_BITS 1
+#define COAP_BLOCK_MORE_MASK (1U << (COAP_BLOCK_SZX_BITS))
 #define COAP_BLOCK_NUM_BITS 20
-#define COAP_BLOCK_OPT_BITS ((COAP_BLOCK_SZX_BITS) + (COAP_BLOCK_M_BITS) + (COAP_BLOCK_NUM_BITS))
-#define COAP_BLOCK_OPT_BYTES ((COAP_BLOCK_OPT_BITS >> 3 ))
+#define COAP_BLOCK_OPT_BITS ((COAP_BLOCK_SZX_BITS) + (COAP_BLOCK_MORE_BITS) + (COAP_BLOCK_NUM_BITS))
+#define COAP_BLOCK_OPT_BYTES ((COAP_BLOCK_OPT_BITS) >> 3)
 #define COAP_BLOCK_SZX_MAX ((1U << (COAP_BLOCK_SZX_BITS)) - 1)
 #define COAP_BLOCK_SZX_SHIFT_MIN 4
 #define COAP_BLOCK_SZX_SHIFT_MAX ((COAP_BLOCK_SZX_SHIFT_MIN) + (COAP_BLOCK_SZX_MAX))
 #define COAP_BLOCK_INDEX_BITS ((COAP_BLOCK_NUM_BITS) + (COAP_BLOCK_SZX_SHIFT_MAX))
 #define COAP_BLOCK_INDEX_MAX ((1UL << (COAP_BLOCK_INDEX_BITS)) - 1)
 
-typedef uint8_t coap_block_buf_t[COAP_BLOCK_OPT_BYTES];
 typedef uint8_t coap_block_szx_t;
 typedef uint32_t coap_block_idx_t;
-typedef uint32_t coap_block_num_t;
-typedef struct coap_block_s {
-    coap_block_index_t index : COAP_BLOCK_INDEX_BITS;
+typedef uint32_t coap_block_buf_t;
+typedef struct coap_block_opt_s {
+    coap_block_idx_t idx;
+    coap_block_szx_t szx;
     bool more;
-} coap_block_t;
-
-typedef coap_block_trasfer_s {
-        
-} coap_block_transfer_t;
+} coap_block_opt_t;
 
 // End RFC 7959 Block-Wise Transfer structures
 
@@ -664,18 +662,13 @@ struct coap_req_data_s {
     } state;
 };
 
+#define COAP_OPT_MAX UINT16_MAX
+typedef uint16_t coap_opt_num_t;
 typedef struct coap_opt_s {
-    uint16_t num;
-    uint16_t len;
-    const void *val;
-} coap_opt_t;
-
-typedef uint32_t coap_opt_num_t; // technically, it's possible with delta encoding to have an option number > UINT16_MAX
-typedef struct coap_msg_opt_s {
     coap_opt_num_t num;
     uint16_t len;
     const void *val;
-} coap_msg_opt_t;
+} coap_opt_t;
 
 /**
  * ZCOAP_METHOD_SIGNATURE
@@ -684,7 +677,7 @@ typedef struct coap_msg_opt_s {
  * simplify implentation, we define the ZCAOP_METHOD_SIGNATURE macro.  All
  * method functions for a given implementation should use this.
  */
-#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_msg_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, size_t * const ctcnt, coap_ct_t * const cts
+#define ZCOAP_METHOD_SIGNATURE coap_node_t * const node, coap_req_data_t * const req, const size_t nopts, const coap_opt_t opts[], const coap_ct_t ct, const size_t len, const void * const payload, size_t * const ctcnt, coap_ct_t * const cts
 
 /**
  * ZCOAP_METHOD_ARGS
@@ -977,17 +970,15 @@ typedef uint8_t zcoap_bool_t;
 #define ZCOAP_TRUE_STR "true"
 #define ZCOAP_FALSE_STR "false"
 
-extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
-extern coap_code_t coap_get_content_fmt_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
-extern coap_code_t coap_get_accept_option(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], coap_ct_t* ct);
-extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size1);
-extern coap_code_t coap_get_size2(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size2);
-extern coap_code_t coap_get_sizex(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_size_t* size);
-extern coap_code_t coap_get_block1(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block1);
-extern coap_code_t coap_get_block2(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block2);
-extern coap_code_t coap_get_blockx(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], bool* found, coap_block_t* block);
-extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t* nqueryopts);
-extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_msg_opt_t opts[], size_t nqueryopts, coap_msg_opt_t* queryopts);
+extern coap_code_t coap_get_content_type(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_content_fmt_option(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_accept_option(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], coap_ct_t* ct);
+extern coap_code_t coap_get_size1(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], bool* found, coap_size_t* size1);
+extern coap_code_t coap_get_size2(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], bool* found, coap_size_t* size2);
+extern coap_code_t coap_get_block1(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], bool* found, coap_block_opt_t* block1);
+extern coap_code_t coap_get_block2(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], bool* found, coap_block_opt_t* block2);
+extern coap_code_t coap_count_query_opts(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], size_t* nqueryopts);
+extern coap_code_t coap_get_query_opts(coap_req_data_t* req, size_t nopts, const coap_opt_t opts[], size_t nqueryopts, coap_opt_t* queryopts);
 extern coap_code_t coap_get_payload(coap_req_data_t* req, size_t* len, const void** payload);
 
 extern void coap_publish(coap_node_t *node); // publish an update to observers of the passed node
