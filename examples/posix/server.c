@@ -82,7 +82,7 @@ static int _addr_cmp6(const struct sockaddr_in6 *a, const struct sockaddr_in6 *b
  * @param b sockaddr for comparison
  * @return -1 if a<b, 0 if a==b, 1 if a>b
  */
-int coap_endpoint_cmp(const coap_endpoint_t *a, const coap_endpoint_t *b)
+int coap_endpoint_cmp(const coap_endpoint_t * const a, const coap_endpoint_t * const b)
 {
     if (a->sa.sa_family < b->sa.sa_family)
     {

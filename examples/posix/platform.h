@@ -29,6 +29,7 @@ typedef union coap_endpoint_s {
     struct sockaddr_in6 s6;
     struct sockaddr_storage ss;
 } coap_endpoint_t;
+extern int coap_endpoint_cmp(const coap_endpoint_t *a, const coap_endpoint_t *b);
 
 /*
  * We are multithreaded.  Give the zcoap server some locking primitives.
