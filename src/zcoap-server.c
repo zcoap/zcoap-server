@@ -1778,6 +1778,11 @@ static coap_code_t validate_stateless_block2(coap_req_data_t *const req, const s
     return 0;
 }
 
+/**
+ * Free a shadow tree cache structure.
+ *
+ * @param tree tree to free
+ */
 static void free_cache_tree(coap_cache_tree_t *tree)
 {
     if (tree->nodes) {
@@ -1792,6 +1797,14 @@ static void free_cache_tree(coap_cache_tree_t *tree)
     ZCOAP_FREE(tree);
 }
 
+/**
+ * PUT handler for stateful BLOCK1 PUT requests managed by zcoap-server.
+ *
+ * @param req initiating CoAP request
+ * @param nopts number of request options
+ * @param opts request options
+ * @param node pointer to .well-known/core tree node
+ */
 static void coap_block1_put(ZCOAP_METHOD_SIGNATURE)
 {
     ZCOAP_METHOD_HEADER(ZCOAP_FMT_SENTINEL);
@@ -2011,12 +2024,16 @@ static int sub_id_cmp(const void * const _a, const void * const _b)
  * This is useful for finding an instance of a subscriber endpoint within the
  * subscriber+token map, but there may be more than one.
  *
- * This comparitor should only used for searching for the potentially non-unique
- * endpoint keys.  It should not be used with an unstable qsort because
- * rearrangement of secondary keys will occur.
+ * This comparitor should only used for searching for potentially non-unique
+ * endpoint keys.  It should not be used with an unstable qsort if secondary
+ * keys are relevant, as rearrangement of secondary keys will occur.
+ *
+ * @param _a subscription a
+ * @param _b subscription b
+ * @return -1 if a < b, 1 if a > b, 0 if a == b
  */
 
-static int sub_cmp(const void * const _a, const void * const _b)
+static int sub_endpoint_cmp(const void * const _a, const void * const _b)
 {
     ZCOAP_ASSERT(_a != NULL && _b != NULL);
     coap_sub_t *a = *(coap_sub_t **)_a;
@@ -2120,10 +2137,11 @@ alloc_sub_id(coap_sub_map_t * const map, coap_req_data_t * const req, coap_sub_t
 }
 
 /**
- * Free a subscription ID in a subscriber's subscription map in the subscriber
- * table.  If after freeing the passed ID the subscriber's subscription map is
- * empty, free the subscriber's endpoint information and remove the subscriber
- * from the subscriber table.
+ * Free a subscription ID in a subscriber's subscription map.  If after freeing
+ * the subscriber's subscription map is empty, free the subscriber's endpoint
+ * information and remove the subscriber from the top-level subscription map.
+ *
+ * Caller's must hold the map's lock.
  *
  * @param map susbscription map
  * @param sub subscription to free from its subscriber's map
