@@ -875,6 +875,8 @@ __attribute__((nonnull (1)))
 #endif
 coap_ack(coap_req_data_t* const req)
 {
+    uint8_t asBytes[sizeof(coap_msg_t) + COAP_MAX_TKL];
+    size_t len = sizeof(coap_msg_t);// + req->msg->tkl;
     if (   req == NULL
         || req->msg == NULL
         || req->len < sizeof(coap_msg_t)
@@ -886,13 +888,13 @@ coap_ack(coap_req_data_t* const req)
     } else if (req->msg->type != COAP_TYPE_CONFIRMABLE) {
         return; // should never land here!
     }
-    coap_msg_t ack;
-    ZCOAP_MEMCPY(&ack, req->msg, sizeof(ack));
-    ack.tkl = 0;
-    ack.type = COAP_TYPE_ACK;
-    ack.code.code_class = 0;
-    ack.code.code_detail = 0;
-    ((*req->responder)(req, sizeof(ack), &ack));
+    coap_msg_t *ack = asBytes;
+    ZCOAP_MEMCPY(ack, req->msg, len);
+    ack->tkl = 0;//req->msg->tkl;
+    ack->type = COAP_TYPE_ACK;
+    ack->code.code_class = 0;
+    ack->code.code_detail = 0;
+    ((*req->responder)(req, len, ack));
     // Note transmission of ACK to illicit non-piggy-backed
     // response behavior in coap_rsp().
     req->state.acked = true;
