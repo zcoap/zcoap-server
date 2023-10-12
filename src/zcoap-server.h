@@ -114,6 +114,7 @@ typedef enum coap_content_format_e {
     COAP_FMT_CWT = 61,
     COAP_FMT_MULTIPART_CORE = 62,
     COAP_FMT_CBOR_SEQ = 63,
+    COAP_FMT_FORMAT_AUTO = 72,
     COAP_FMT_COSE_ENCRYPT = 96,
     COAP_FMT_COSE_MAC = 97,
     COAP_FMT_COSE_SIGN = 98,
